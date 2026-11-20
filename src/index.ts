@@ -11,7 +11,14 @@ import {
 } from "./gmgn.js";
 import { getMeteoraTvl } from "./meteora.js";
 import { canAlert, getState, pruneCache, recordAlert, recordWarmup } from "./db.js";
-import { buildMessage, sendAlert, sendTestMessage } from "./telegram.js";
+import { buildReport } from "./report.js";
+import {
+  buildMessage,
+  sendAlert,
+  sendReport,
+  sendTestMessage,
+  type AlertPayload,
+} from "./telegram.js";
 
 let cycleRunning = false;
 
@@ -26,7 +33,16 @@ interface Candidate {
   ageSeconds: number;
 }
 
-type Outcome = "alert" | "warmup" | "rejected" | "error";
+interface Passed {
+  payload: AlertPayload;
+  state: {
+    mint: string;
+    symbol: string;
+    marketCap: number;
+    athMarketCap: number;
+    tvlUsd: number;
+  };
+}
 
 function collectCandidates(rank: RankItem[], nowSeconds: number): Candidate[] {
   const candidates: Candidate[] = [];
@@ -51,22 +67,18 @@ function collectCandidates(rank: RankItem[], nowSeconds: number): Candidate[] {
   return candidates;
 }
 
-async function processCandidate(
-  candidate: Candidate,
-  warmup: boolean,
-): Promise<Outcome> {
+/** Returns the alert payload when the token passes every filter, else null. */
+async function evaluate(candidate: Candidate): Promise<Passed | null> {
   const { mint } = candidate;
 
   // Free check first: if GMGN already told us this token is unsafe, do not
   // spend a single request on it.
   const cachedSecurity = peekTokenSecurity(mint);
-  if (cachedSecurity && !evaluateSecurity(cachedSecurity).ok) {
-    return "rejected";
-  }
+  if (cachedSecurity && !evaluateSecurity(cachedSecurity).ok) return null;
 
   const info = await getTokenInfo(mint);
   const totalFeeSol = Number(info.total_fee ?? 0);
-  if (totalFeeSol < config.scan.minTotalFeeSol) return "rejected";
+  if (totalFeeSol < config.scan.minTotalFeeSol) return null;
 
   const security = await getTokenSecurity(mint);
   const verdict = evaluateSecurity(security);
@@ -77,7 +89,7 @@ async function processCandidate(
       mintRenounced: verdict.mintRenounced,
       freezeRenounced: verdict.freezeRenounced,
     });
-    return "rejected";
+    return null;
   }
 
   const meteora = await getMeteoraTvl(mint);
@@ -88,7 +100,7 @@ async function processCandidate(
     historyAth > 0 &&
     candidate.marketCap >= historyAth * config.scan.athTolerance;
 
-  const payload = {
+  const payload: AlertPayload = {
     mint,
     symbol: String(candidate.item.symbol ?? info.symbol ?? "?"),
     name: String(candidate.item.name ?? info.name ?? ""),
@@ -107,31 +119,59 @@ async function processCandidate(
       : undefined,
   };
 
-  const state = {
-    mint,
-    symbol: payload.symbol,
-    marketCap: candidate.marketCap,
-    athMarketCap: historyAth,
-    tvlUsd: meteora.tvlUsd,
+  return {
+    payload,
+    state: {
+      mint,
+      symbol: payload.symbol,
+      marketCap: candidate.marketCap,
+      athMarketCap: historyAth,
+      tvlUsd: meteora.tvlUsd,
+    },
   };
+}
+
+function printDryRun(passed: Passed[]): void {
+  if (config.report.mode === "digest") {
+    for (const part of buildReport(passed.map((item) => item.payload))) {
+      console.log(part.text);
+      console.log("");
+    }
+    return;
+  }
+
+  for (const item of passed) {
+    console.log(buildMessage(item.payload));
+    console.log("");
+  }
+}
+
+async function deliver(passed: Passed[], warmup: boolean): Promise<void> {
+  if (passed.length === 0) return;
 
   if (warmup) {
-    recordWarmup(state);
-    log.info(`warmup seeded $${payload.symbol}`, { mint });
-    return "warmup";
+    for (const item of passed) {
+      recordWarmup(item.state);
+      log.info(`warmup seeded $${item.payload.symbol}`, { mint: item.state.mint });
+    }
+    return;
   }
 
   if (config.dryRun) {
-    log.info("dry run alert", { mint, symbol: payload.symbol });
-    console.log(buildMessage(payload));
-  } else {
-    await sendAlert(payload);
+    printDryRun(passed);
+    // Recorded in dry run too, so flipping DRY_RUN=false does not replay a
+    // burst of alerts for tokens the bot already surfaced while testing.
+    for (const item of passed) recordAlert(item.state);
+    return;
   }
 
-  // Recorded in dry run too, so flipping DRY_RUN=false does not replay a burst
-  // of alerts for tokens the bot already surfaced while testing.
-  recordAlert(state);
-  return "alert";
+  if (config.report.mode === "digest") {
+    await sendReport(passed.map((item) => item.payload));
+  } else {
+    for (const item of passed) await sendAlert(item.payload);
+  }
+
+  for (const item of passed) recordAlert(item.state);
 }
 
 async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
@@ -153,19 +193,15 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
     const eligible = collectCandidates(rank, nowSeconds);
     const batch = eligible.slice(0, config.scan.maxCandidatesPerCycle);
 
-    const counts: Record<Outcome, number> = {
-      alert: 0,
-      warmup: 0,
-      rejected: 0,
-      error: 0,
-    };
+    const passed: Passed[] = [];
+    let errors = 0;
 
     for (const candidate of batch) {
       try {
-        const outcome = await processCandidate(candidate, warmup);
-        counts[outcome] += 1;
+        const result = await evaluate(candidate);
+        if (result) passed.push(result);
       } catch (error) {
-        counts.error += 1;
+        errors += 1;
         log.error(`candidate failed $${String(candidate.item.symbol ?? candidate.mint)}`, {
           mint: candidate.mint,
           error: error instanceof Error ? error.message : String(error),
@@ -173,14 +209,22 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
       }
     }
 
+    let delivered = 0;
+    try {
+      await deliver(passed, warmup);
+      delivered = passed.length;
+    } catch (error) {
+      log.error("delivery failed", error instanceof Error ? error.message : String(error));
+    }
+
     log.info("cycle done", {
       scanned: rank.length,
       eligible: eligible.length,
       batch: batch.length,
-      alerts: counts.alert,
-      warmup: counts.warmup,
-      rejected: counts.rejected,
-      errors: counts.error,
+      passed: passed.length,
+      delivered,
+      rejected: batch.length - passed.length - errors,
+      errors,
       gapMs: pacer.currentGapMs,
       ms: Date.now() - startedAt,
     });

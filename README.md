@@ -29,8 +29,27 @@ GMGN /v1/market/rank (interval 5m, limit 100, order volume)
   -> /v1/token/info      (total_fee, volume_5m)
   -> /v1/token/security  (blacklist, honeypot, renounced)
   -> Meteora DLMM + DAMM v2 (sum tvl)
-  -> Telegram + tombol Copy CA
+  -> 1 pesan digest per siklus + tombol copy CA per token
 ```
+
+## Format alert
+
+Satu siklus = satu pesan, bukan satu pesan per token. Urut MC terbesar.
+
+```
+🚀 Runner Alert · 6 token · 20:14 WIB
+
+1. $USELESS · MC $81.29M · vol $3.9K
+2. $ANSEM · MC $31.72M · vol $10.2K · 🔥ATH
+3. $STONK · MC $25.38M · vol $4.8K
+```
+
+Di bawah pesan ada tombol `📋 $SYMBOL` (satu per token, isinya mint untuk copy CA),
+3 tombol per baris, plus satu link GMGN Trending.
+
+Umur token, total fee, dan TVL Meteora **tetap dipakai sebagai filter/enrichment**
+tapi tidak ditampilkan di pesan. Kalau butuh format lama (satu pesan per token
+dengan semua detail), set `REPORT_MODE=individual`.
 
 ## Setup
 
@@ -56,6 +75,12 @@ pm2 logs gmgn-runner-alert
 
 ## Catatan
 
+- `REPORT_MODE=digest` (default) menggabungkan semua token yang lolos dalam satu
+  siklus jadi satu pesan. `REPORT_MODE=individual` kembali ke satu pesan per token.
+- Pesan dipecah otomatis (`1/2`, `2/2`) kalau melewati `REPORT_MAX_CHARS` atau
+  `REPORT_MAX_TOKENS` per pesan.
+- Kalau dua token punya simbol sama, label tombolnya diberi pembeda mint
+  (`📋 $PEPE ·4Cxj`) supaya tidak tertukar.
 - State dedupe/cooldown disimpan di `data/bot.db` (SQLite bawaan Node).
 - `DRY_RUN=true` akan mencetak pesan ke log tanpa mengirim ke Telegram, tapi state tetap dicatat.
 - `npm run warmup` mencatat token trending saat ini tanpa alert, jadi saat pertama kali live tidak ada burst.

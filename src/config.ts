@@ -63,6 +63,16 @@ export const config = {
     meteoraCacheMs: num("METEORA_CACHE_MS", 300_000),
     maxCandidatesPerCycle: num("MAX_CANDIDATES_PER_CYCLE", 25),
   },
+  report: {
+    /** digest = one message per cycle, individual = one message per token. */
+    mode: (process.env.REPORT_MODE ?? "digest").trim().toLowerCase() === "individual"
+      ? ("individual" as const)
+      : ("digest" as const),
+    timezone: process.env.REPORT_TIMEZONE ?? "Asia/Jakarta",
+    tzLabel: process.env.REPORT_TZ_LABEL ?? "WIB",
+    maxChars: num("REPORT_MAX_CHARS", 3_500),
+    maxTokensPerMessage: num("REPORT_MAX_TOKENS", 20),
+  },
   dbPath: process.env.DB_PATH ?? "data/bot.db",
   dryRun: bool("DRY_RUN", false),
 } as const;
@@ -87,6 +97,8 @@ export function summarizeConfig() {
     meteoraCacheMs: config.scan.meteoraCacheMs,
     maxCandidatesPerCycle: config.scan.maxCandidatesPerCycle,
     pollMs: config.scan.pollMs,
+    reportMode: config.report.mode,
+    reportTimezone: config.report.timezone,
     dryRun: config.dryRun,
   };
 }
