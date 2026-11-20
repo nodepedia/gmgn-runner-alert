@@ -15,6 +15,10 @@ import { buildMessage, sendAlert, sendTestMessage } from "./telegram.js";
 
 let cycleRunning = false;
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 interface Candidate {
   item: RankItem;
   mint: string;
@@ -141,6 +145,9 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
 
   try {
     const rank = await getTrending();
+    // market/rank is the heaviest call in the cycle; give the IP bucket a
+    // moment to refill before the per-token calls start.
+    await sleep(config.gmgn.rankSettleMs);
     const nowSeconds = Math.floor(Date.now() / 1000);
 
     const eligible = collectCandidates(rank, nowSeconds);

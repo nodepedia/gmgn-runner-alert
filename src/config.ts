@@ -31,12 +31,15 @@ export const config = {
     apiKey,
     baseUrl: process.env.GMGN_BASE_URL ?? "https://openapi.gmgn.ai",
     /**
-     * GMGN's IP bucket bans for 30s once exceeded, and bursts are what trigger
-     * it. One request in flight, spaced by 300ms (~3.3 rps), is the measured
-     * safe floor; the pacer backs off automatically if that ever changes.
+     * Measured on the production VPS: the IP bucket holds ~5 units and refills
+     * at roughly 1 unit per second, so anything above 1 request/second drains
+     * it and earns a 30s ban. One request in flight, 1000ms apart, ran 4 cold
+     * cycles back to back (84 requests) with zero 429s.
      */
-    minGapMs: num("GMGN_MIN_GAP_MS", 300),
-    maxGapMs: num("GMGN_MAX_GAP_MS", 2_000),
+    minGapMs: num("GMGN_MIN_GAP_MS", 1_000),
+    maxGapMs: num("GMGN_MAX_GAP_MS", 5_000),
+    /** market/rank is heavy (weight ~3) and drains the bucket; let it refill. */
+    rankSettleMs: num("GMGN_RANK_SETTLE_MS", 800),
   },
   telegram: {
     token: process.env.TELEGRAM_BOT_TOKEN?.trim() ?? "",
@@ -58,7 +61,7 @@ export const config = {
     securityCacheMs: num("SECURITY_CACHE_MS", 3_600_000),
     /** Meteora TVL is only used for display. */
     meteoraCacheMs: num("METEORA_CACHE_MS", 300_000),
-    maxCandidatesPerCycle: num("MAX_CANDIDATES_PER_CYCLE", 40),
+    maxCandidatesPerCycle: num("MAX_CANDIDATES_PER_CYCLE", 25),
   },
   dbPath: process.env.DB_PATH ?? "data/bot.db",
   dryRun: bool("DRY_RUN", false),
@@ -69,6 +72,7 @@ export function summarizeConfig() {
     gmgnBaseUrl: config.gmgn.baseUrl,
     gmgnApiKey: `${config.gmgn.apiKey.slice(0, 6)}…`,
     gmgnGapMs: config.gmgn.minGapMs,
+    gmgnRankSettleMs: config.gmgn.rankSettleMs,
     telegram: config.telegram.token ? "configured" : "MISSING",
     chatIds: config.telegram.chatIds.length > 0 ? config.telegram.chatIds : "MISSING",
     interval: config.scan.interval,
