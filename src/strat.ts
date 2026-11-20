@@ -293,6 +293,16 @@ export const FIELDS: FieldSpec[] = [
     { min: 0, max: 1e12 },
   ),
   numberField(
+    "MIN_TVL_USD",
+    "filter",
+    "minimum Meteora TVL (USD, 0=off)",
+    () => config.scan.minTvlUsd,
+    (value) => {
+      config.scan.minTvlUsd = value;
+    },
+    { min: 0, max: 1e12 },
+  ),
+  numberField(
     "ATH_TOLERANCE",
     "filter",
     "ATH ratio (0.995 = within 0.5%)",

@@ -71,7 +71,7 @@ function collectCandidates(rank: RankItem[], nowSeconds: number): Candidate[] {
 /** Returns the alert payload when the token passes every filter, else null. */
 async function evaluate(
   candidate: Candidate,
-  stats: { rejectedVolume: number },
+  stats: { rejectedVolume: number; rejectedTvl: number },
 ): Promise<Passed | null> {
   const { mint } = candidate;
 
@@ -92,6 +92,25 @@ async function evaluate(
     return null;
   }
 
+  // Meteora is an external (non-GMGN) call, so it runs before the security
+  // request: a TVL reject then costs no GMGN quota at all.
+  const meteora = await getMeteoraTvl(mint);
+  // Fail open: if Meteora could not be read, keep the token instead of
+  // silently dropping a valid signal on an upstream outage.
+  if (
+    meteora.available &&
+    config.scan.minTvlUsd > 0 &&
+    meteora.tvlUsd < config.scan.minTvlUsd
+  ) {
+    stats.rejectedTvl += 1;
+    log.debug(`tvl rejected $${String(candidate.item.symbol ?? mint)}`, {
+      tvlUsd: Math.round(meteora.tvlUsd),
+      min: config.scan.minTvlUsd,
+      pools: meteora.poolCount,
+    });
+    return null;
+  }
+
   const security = await getTokenSecurity(mint);
   const verdict = evaluateSecurity(security);
   if (!verdict.ok) {
@@ -104,7 +123,6 @@ async function evaluate(
     return null;
   }
 
-  const meteora = await getMeteoraTvl(mint);
   const previousState = getState(mint);
   const previousAth = previousState?.last_ath_mc ?? 0;
   const historyAth = Number(candidate.item.history_highest_market_cap ?? 0);
@@ -209,7 +227,7 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
     const batch = eligible.slice(0, config.scan.maxCandidatesPerCycle);
 
     const passed: Passed[] = [];
-    const stats = { rejectedVolume: 0 };
+    const stats = { rejectedVolume: 0, rejectedTvl: 0 };
     let errors = 0;
 
     for (const candidate of batch) {
@@ -241,6 +259,7 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
       delivered,
       rejected: batch.length - passed.length - errors,
       rejectedVolume: stats.rejectedVolume,
+      rejectedTvl: stats.rejectedTvl,
       errors,
       gapMs: pacer.currentGapMs,
       pollMs: config.scan.pollMs,

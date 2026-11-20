@@ -37,6 +37,9 @@ MIN_MARKET_CAP=2000000
 MIN_TOTAL_FEE_SOL=60
 # Volume 5 menit minimal dalam USD. 0 = filter dimatikan.
 MIN_VOL5M_USD=10000
+# TVL minimal di Meteora (DLMM + DAMM v2) dalam USD. 0 = filter dimatikan.
+# Hanya likuiditas Meteora yang dihitung; likuiditas di DEX lain tidak.
+MIN_TVL_USD=20000
 # 0.995 = dianggap ATH kalau MC >= 99.5% rekor tertinggi.
 ATH_TOLERANCE=0.995
 

@@ -64,6 +64,8 @@ export const config = {
     minTotalFeeSol: num("MIN_TOTAL_FEE_SOL", 60),
     /** price.volume_5m from token/info; 0 disables the filter. */
     minVol5mUsd: num("MIN_VOL5M_USD", 10_000),
+    /** Meteora DLMM + DAMM v2 TVL; 0 disables the filter. */
+    minTvlUsd: num("MIN_TVL_USD", 20_000),
     cooldownMinutes,
     cooldownMs: cooldownMinutes * 60_000,
     athTolerance: num("ATH_TOLERANCE", 0.995),
@@ -103,6 +105,7 @@ export function summarizeConfig() {
     minMarketCap: config.scan.minMarketCap,
     minTotalFeeSol: config.scan.minTotalFeeSol,
     minVol5mUsd: config.scan.minVol5mUsd,
+    minTvlUsd: config.scan.minTvlUsd,
     cooldownMinutes: config.scan.cooldownMinutes,
     athTolerance: config.scan.athTolerance,
     infoCacheMs: config.scan.infoCacheMs,

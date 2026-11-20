@@ -5,6 +5,8 @@ import { getCache, setCache } from "./db.js";
 export interface MeteoraTvl {
   tvlUsd: number;
   poolCount: number;
+  /** false when every endpoint failed, so callers can skip TVL filters. */
+  available: boolean;
 }
 
 interface MeteoraPool {
@@ -63,7 +65,7 @@ async function fetchPools(endpoint: string, mint: string): Promise<MeteoraPool[]
 
 export async function getMeteoraTvl(mint: string): Promise<MeteoraTvl> {
   const cached = getCache<MeteoraTvl>(cacheKey(mint), config.scan.meteoraCacheMs);
-  if (cached) return cached;
+  if (cached) return { ...cached, available: cached.available ?? true };
 
   const results = await Promise.allSettled(
     ENDPOINTS.map((endpoint) => fetchPools(endpoint, mint)),
@@ -85,10 +87,11 @@ export async function getMeteoraTvl(mint: string): Promise<MeteoraTvl> {
     }
   }
 
-  const summary: MeteoraTvl = { tvlUsd, poolCount: seen.size };
+  const complete = results.every((result) => result.status === "fulfilled");
+  const summary: MeteoraTvl = { tvlUsd, poolCount: seen.size, available: complete };
 
   // Do not cache a total that lost one of the two endpoints to a timeout.
-  if (results.every((result) => result.status === "fulfilled")) {
+  if (complete) {
     setCache(cacheKey(mint), summary);
   }
 

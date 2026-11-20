@@ -144,7 +144,7 @@ export async function sendTestMessage(): Promise<void> {
     "✅ <b>gmgn-runner-alert aktif</b>",
     "",
     `Report: <b>${config.report.mode}</b> · trending <b>${config.scan.interval}</b> · limit ${config.scan.limit}`,
-    `Filter: age ≥ ${config.scan.minAgeHours}h · MC ≥ ${formatUsd(config.scan.minMarketCap)} · fees ≥ ${config.scan.minTotalFeeSol} SOL`,
+    `Filter: age ≥ ${config.scan.minAgeHours}h · MC ≥ ${formatUsd(config.scan.minMarketCap)} · fees ≥ ${config.scan.minTotalFeeSol} SOL · vol 5m ≥ ${formatUsd(config.scan.minVol5mUsd)} · TVL Meteora ≥ ${formatUsd(config.scan.minTvlUsd)}`,
     `Cooldown: ${config.scan.cooldownMs / 60_000} menit`,
     "",
     "Bot siap memantau.",

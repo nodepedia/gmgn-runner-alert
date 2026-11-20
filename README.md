@@ -10,6 +10,7 @@ Bot Telegram untuk memantau token Solana yang sedang trending di GMGN (window 5 
 | Market cap | `market_cap` | >= $2.000.000 |
 | Total fees | `total_fee` | >= 60 SOL |
 | Volume 5m | `price.volume_5m` | >= $10.000 |
+| Meteora TVL | `tvl` DLMM + DAMM v2 | >= $20.000 |
 | Blacklist | `blacklist` | == 0 |
 | Honeypot | `honeypot` | == 0 |
 | Mint authority | `renounced_mint` | true |
@@ -17,7 +18,6 @@ Bot Telegram untuk memantau token Solana yang sedang trending di GMGN (window 5 
 
 Enrichment (tidak memblokir alert):
 
-- Total TVL semua pool Meteora (DLMM + DAMM v2)
 - Tag ATH dari `market_cap >= history_highest_market_cap`
 
 ## Alur
@@ -28,7 +28,7 @@ GMGN /v1/market/rank (interval 5m, limit 100, order volume)
   -> cooldown 1 jam per token
   -> /v1/token/info      (total_fee, volume_5m)
   -> /v1/token/security  (blacklist, honeypot, renounced)
-  -> Meteora DLMM + DAMM v2 (sum tvl)
+  -> Meteora DLMM + DAMM v2 (sum tvl, filter >= $20K)
   -> 1 pesan digest per siklus + tombol copy CA per token
 ```
 
@@ -47,9 +47,9 @@ Satu siklus = satu pesan, bukan satu pesan per token. Urut MC terbesar.
 Di bawah pesan hanya ada tombol `📋 $SYMBOL` (satu per token, isinya mint untuk
 copy CA), 3 tombol per baris. Tidak ada tombol link lain.
 
-Umur token, total fee, dan TVL Meteora **tetap dipakai sebagai filter/enrichment**
-tapi tidak ditampilkan di pesan. Kalau butuh format lama (satu pesan per token
-dengan semua detail), set `REPORT_MODE=individual`.
+Umur token, total fee, dan TVL Meteora **dipakai sebagai filter** tapi tidak
+ditampilkan di pesan. Kalau butuh format lama (satu pesan per token dengan semua
+detail), set `REPORT_MODE=individual`.
 
 ## Setup
 
@@ -94,7 +94,7 @@ ditulis di `strat.conf` juga tetap dibaca.
 | telegram | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | dari `.env` |
 | filter | `TRENDING_INTERVAL` / `TRENDING_LIMIT` / `TRENDING_ORDER_BY` | 5m / 100 / volume |
 | filter | `MIN_AGE_HOURS` / `MIN_MARKET_CAP` / `MIN_TOTAL_FEE_SOL` | 48 / 2e6 / 60 |
-| filter | `MIN_VOL5M_USD` / `ATH_TOLERANCE` | 10000 / 0.995 |
+| filter | `MIN_VOL5M_USD` / `MIN_TVL_USD` / `ATH_TOLERANCE` | 10000 / 20000 / 0.995 |
 | runtime | `POLL_INTERVAL_MS` / `MAX_CANDIDATES_PER_CYCLE` / `COOLDOWN_MINUTES` | 60000 / 25 / 60 |
 | runtime | `DRY_RUN` / `DB_PATH` | false / data/bot.db |
 | cache | `INFO_CACHE_MS` / `SECURITY_CACHE_MS` / `METEORA_CACHE_MS` | 55s / 1h / 5m |
