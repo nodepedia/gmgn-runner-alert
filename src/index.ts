@@ -12,6 +12,7 @@ import {
 import { getMeteoraTvl } from "./meteora.js";
 import { canAlert, getState, pruneCache, recordAlert, recordWarmup } from "./db.js";
 import { buildReport } from "./report.js";
+import { initStrat, printEffectiveConfig, reloadStratIfChanged } from "./strat.js";
 import {
   buildMessage,
   sendAlert,
@@ -191,6 +192,9 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
     return;
   }
   cycleRunning = true;
+  // Pick up strat.conf edits at the cycle boundary; the poll delay below uses
+  // the value read at scheduling time, so a new POLL_INTERVAL_MS applies next.
+  reloadStratIfChanged();
   const startedAt = Date.now();
   const warmup = options.warmup === true;
 
@@ -239,6 +243,7 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
       rejectedVolume: stats.rejectedVolume,
       errors,
       gapMs: pacer.currentGapMs,
+      pollMs: config.scan.pollMs,
       ms: Date.now() - startedAt,
     });
   } catch (error) {
@@ -250,6 +255,13 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
 
 async function main(): Promise<void> {
   const args = new Set(process.argv.slice(2));
+
+  initStrat();
+
+  if (args.has("--show-config")) {
+    printEffectiveConfig();
+    return;
+  }
 
   log.info("starting gmgn-runner-alert", summarizeConfig());
   pruneCache();

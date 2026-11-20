@@ -38,6 +38,20 @@ export class Pacer {
     return this.gap;
   }
 
+  /**
+   * Applies new spacing limits from strat.conf without dropping the queue.
+   * Outside a 429 freeze the gap snaps to the new floor so tuning takes effect
+   * on the next request instead of decaying over dozens of successes.
+   */
+  reconfigure(options: Partial<PacerOptions>): void {
+    this.options.minGapMs = options.minGapMs ?? this.options.minGapMs;
+    this.options.maxGapMs = options.maxGapMs ?? this.options.maxGapMs;
+    const frozen = Date.now() < this.frozenUntil;
+    const clamp = (value: number) =>
+      Math.min(Math.max(value, this.options.minGapMs), this.options.maxGapMs);
+    this.gap = frozen ? clamp(this.gap) : this.options.minGapMs;
+  }
+
   schedule<T>(task: () => Promise<T>): Promise<T> {
     const result = this.chain.then(async () => {
       const jitter = Math.floor(Math.random() * (this.options.jitterMs ?? 150));

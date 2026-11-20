@@ -56,12 +56,55 @@ dengan semua detail), set `REPORT_MODE=individual`.
 ```bash
 npm install
 cp .env.example .env
-# isi GMGN_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+cp strat.conf.example strat.conf
+# isi GMGN_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID di .env
 npm run build
 npm run test:telegram   # kirim pesan tes
 npm run warmup          # catat token trending saat ini tanpa kirim alert
 npm run once            # satu kali scan, tanpa daemon
 ```
+
+## Tuning tanpa deploy (`strat.conf`)
+
+Semua angka bisa diubah dari **satu file**: `strat.conf` (tidak ikut git, ada
+template di `strat.conf.example`).
+
+```bash
+cp strat.conf.example strat.conf
+nano strat.conf          # ubah MIN_VOL5M_USD, COOLDOWN_MINUTES, dll
+node dist/index.js --show-config   # lihat nilai efektif + asal nilainya
+```
+
+Edit lalu simpan — **tanpa restart, tanpa rebuild, tanpa push**. Bot mengecek
+mtime file di awal setiap siklus, jadi perubahan berlaku pada siklus berikutnya
+(maksimal ~`POLL_INTERVAL_MS`, default 60 detik). Log akan menulis:
+
+```
+strat.conf reloaded {"file":"/opt/gmgn-runner-alert/strat.conf","keys":25,"changed":1,"errors":0}
+strat MIN_VOL5M_USD: 10000 -> 5000
+```
+
+Urutan prioritas: **`strat.conf` > `.env` > default di kode**. Secret
+(`GMGN_API_KEY`, `TELEGRAM_BOT_TOKEN`) sebaiknya tetap di `.env`, tapi kalau
+ditulis di `strat.conf` juga tetap dibaca.
+
+| Grup | Key | Default |
+|---|---|---|
+| gmgn | `GMGN_MIN_GAP_MS` / `GMGN_MAX_GAP_MS` / `GMGN_RANK_SETTLE_MS` | 1000 / 5000 / 800 |
+| telegram | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | dari `.env` |
+| filter | `TRENDING_INTERVAL` / `TRENDING_LIMIT` / `TRENDING_ORDER_BY` | 5m / 100 / volume |
+| filter | `MIN_AGE_HOURS` / `MIN_MARKET_CAP` / `MIN_TOTAL_FEE_SOL` | 48 / 2e6 / 60 |
+| filter | `MIN_VOL5M_USD` / `ATH_TOLERANCE` | 10000 / 0.995 |
+| runtime | `POLL_INTERVAL_MS` / `MAX_CANDIDATES_PER_CYCLE` / `COOLDOWN_MINUTES` | 60000 / 25 / 60 |
+| runtime | `DRY_RUN` / `DB_PATH` | false / data/bot.db |
+| cache | `INFO_CACHE_MS` / `SECURITY_CACHE_MS` / `METEORA_CACHE_MS` | 55s / 1h / 5m |
+| report | `REPORT_MODE` / `REPORT_TIMEZONE` / `REPORT_TZ_LABEL` | digest / Asia/Jakarta / WIB |
+| report | `REPORT_MAX_CHARS` / `REPORT_MAX_TOKENS` | 3500 / 20 |
+
+Nilai divalidasi: angka di luar rentang, enum salah, atau key typo **tidak**
+mengubah apa pun. Nilai lama tetap dipakai dan alasannya masuk log
+(`strat.conf ignored a value -> ...`). `DB_PATH` butuh restart karena koneksi
+SQLite dibuka saat start; sisanya berlaku langsung.
 
 ## PM2
 

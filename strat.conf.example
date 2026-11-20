@@ -1,0 +1,66 @@
+# ==========================================================================
+# strat.conf — semua knob bot di satu tempat.
+#
+# Cara pakai:
+#   - Salin file ini: cp strat.conf.example strat.conf
+#   - Edit, simpan. Perubahan dipakai otomatis di siklus berikutnya
+#     (maksimal ~POLL_INTERVAL_MS), tanpa restart dan tanpa redeploy.
+#   - Format: KEY=value, satu per baris. Komentar pakai #.
+#   - Nilai di sini MENANG atas .env dan atas default di kode.
+#   - Kalau ada baris yang salah, nilainya diabaikan (nilai lama tetap
+#     dipakai) dan alasannya muncul di log: "strat.conf ignored a value".
+#   - Cek nilai efektif: node dist/index.js --show-config
+# ==========================================================================
+
+# --- GMGN / pacing --------------------------------------------------------
+# Jangan turunkan GMGN_MIN_GAP_MS di bawah 1000: bucket IP GMGN ~5 unit dan
+# terisi ~1 unit/detik. Di bawah itu pernah kena ban 30 detik.
+GMGN_BASE_URL=https://openapi.gmgn.ai
+# GMGN_API_KEY=            # biarkan di .env
+GMGN_MIN_GAP_MS=1000
+GMGN_MAX_GAP_MS=5000
+GMGN_RANK_SETTLE_MS=800
+
+# --- Telegram -------------------------------------------------------------
+# TELEGRAM_BOT_TOKEN=      # biarkan di .env
+# TELEGRAM_CHAT_ID=        # biarkan di .env
+
+# --- Sumber trending ------------------------------------------------------
+# 1m | 5m | 1h | 6h | 24h
+TRENDING_INTERVAL=5m
+TRENDING_LIMIT=100
+TRENDING_ORDER_BY=volume
+
+# --- Filter (semua hard filter, harus lolos semua) ------------------------
+MIN_AGE_HOURS=48
+MIN_MARKET_CAP=2000000
+MIN_TOTAL_FEE_SOL=60
+# Volume 5 menit minimal dalam USD. 0 = filter dimatikan.
+MIN_VOL5M_USD=10000
+# 0.995 = dianggap ATH kalau MC >= 99.5% rekor tertinggi.
+ATH_TOLERANCE=0.995
+
+# --- Siklus ---------------------------------------------------------------
+# Jeda antar siklus (60 detik = 1 menit).
+POLL_INTERVAL_MS=60000
+# Batas token yang dicek per siklus (sisanya menyusul siklus berikutnya).
+MAX_CANDIDATES_PER_CYCLE=25
+# Token yang sama tidak di-alert lagi selama N menit.
+COOLDOWN_MINUTES=60
+# true = cetak alert ke log, tidak kirim ke Telegram.
+DRY_RUN=false
+# Butuh restart (koneksi SQLite dibuka saat start).
+DB_PATH=data/bot.db
+
+# --- Cache (menghemat kuota API) ------------------------------------------
+INFO_CACHE_MS=55000
+SECURITY_CACHE_MS=3600000
+METEORA_CACHE_MS=300000
+
+# --- Format pesan ---------------------------------------------------------
+# digest = satu pesan per siklus | individual = satu pesan per token.
+REPORT_MODE=digest
+REPORT_TIMEZONE=Asia/Jakarta
+REPORT_TZ_LABEL=WIB
+REPORT_MAX_CHARS=3500
+REPORT_MAX_TOKENS=20

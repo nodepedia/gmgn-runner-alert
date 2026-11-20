@@ -1,5 +1,7 @@
 import "dotenv/config";
 
+export type ReportMode = "digest" | "individual";
+
 function num(key: string, fallback: number): number {
   const raw = process.env[key];
   if (raw === undefined || raw.trim() === "") return fallback;
@@ -26,6 +28,13 @@ const chatIds = (process.env.TELEGRAM_CHAT_ID ?? "")
   .map((value) => value.trim())
   .filter(Boolean);
 
+const cooldownMinutes = num("COOLDOWN_MINUTES", 60);
+
+/**
+ * Every field is intentionally mutable: src/strat.ts re-applies strat.conf at
+ * runtime, so editing that file changes behaviour without a redeploy.
+ * Values loaded here are the defaults (.env or built-in).
+ */
 export const config = {
   gmgn: {
     apiKey,
@@ -55,7 +64,8 @@ export const config = {
     minTotalFeeSol: num("MIN_TOTAL_FEE_SOL", 60),
     /** price.volume_5m from token/info; 0 disables the filter. */
     minVol5mUsd: num("MIN_VOL5M_USD", 10_000),
-    cooldownMs: num("COOLDOWN_MINUTES", 60) * 60_000,
+    cooldownMinutes,
+    cooldownMs: cooldownMinutes * 60_000,
     athTolerance: num("ATH_TOLERANCE", 0.995),
     /** token/info holds total_fee + volume_5m; one fetch per cycle is enough. */
     infoCacheMs: num("INFO_CACHE_MS", 55_000),
@@ -77,7 +87,7 @@ export const config = {
   },
   dbPath: process.env.DB_PATH ?? "data/bot.db",
   dryRun: bool("DRY_RUN", false),
-} as const;
+};
 
 export function summarizeConfig() {
   return {
@@ -93,7 +103,7 @@ export function summarizeConfig() {
     minMarketCap: config.scan.minMarketCap,
     minTotalFeeSol: config.scan.minTotalFeeSol,
     minVol5mUsd: config.scan.minVol5mUsd,
-    cooldownMinutes: config.scan.cooldownMs / 60_000,
+    cooldownMinutes: config.scan.cooldownMinutes,
     athTolerance: config.scan.athTolerance,
     infoCacheMs: config.scan.infoCacheMs,
     securityCacheMs: config.scan.securityCacheMs,
