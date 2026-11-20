@@ -9,6 +9,7 @@ Bot Telegram untuk memantau token Solana yang sedang trending di GMGN (window 5 
 | Age | `creation_timestamp` | >= 48 jam |
 | Market cap | `market_cap` | >= $2.000.000 |
 | Total fees | `total_fee` | >= 60 SOL |
+| Volume 5m | `price.volume_5m` | >= $10.000 |
 | Blacklist | `blacklist` | == 0 |
 | Honeypot | `honeypot` | == 0 |
 | Mint authority | `renounced_mint` | true |
@@ -16,7 +17,6 @@ Bot Telegram untuk memantau token Solana yang sedang trending di GMGN (window 5 
 
 Enrichment (tidak memblokir alert):
 
-- Volume 5 menit (`price.volume_5m`)
 - Total TVL semua pool Meteora (DLMM + DAMM v2)
 - Tag ATH dari `market_cap >= history_highest_market_cap`
 

@@ -53,6 +53,8 @@ export const config = {
     minAgeHours: num("MIN_AGE_HOURS", 48),
     minMarketCap: num("MIN_MARKET_CAP", 2_000_000),
     minTotalFeeSol: num("MIN_TOTAL_FEE_SOL", 60),
+    /** price.volume_5m from token/info; 0 disables the filter. */
+    minVol5mUsd: num("MIN_VOL5M_USD", 10_000),
     cooldownMs: num("COOLDOWN_MINUTES", 60) * 60_000,
     athTolerance: num("ATH_TOLERANCE", 0.995),
     /** token/info holds total_fee + volume_5m; one fetch per cycle is enough. */
@@ -90,6 +92,7 @@ export function summarizeConfig() {
     minAgeHours: config.scan.minAgeHours,
     minMarketCap: config.scan.minMarketCap,
     minTotalFeeSol: config.scan.minTotalFeeSol,
+    minVol5mUsd: config.scan.minVol5mUsd,
     cooldownMinutes: config.scan.cooldownMs / 60_000,
     athTolerance: config.scan.athTolerance,
     infoCacheMs: config.scan.infoCacheMs,

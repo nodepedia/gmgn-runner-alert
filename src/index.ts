@@ -68,7 +68,10 @@ function collectCandidates(rank: RankItem[], nowSeconds: number): Candidate[] {
 }
 
 /** Returns the alert payload when the token passes every filter, else null. */
-async function evaluate(candidate: Candidate): Promise<Passed | null> {
+async function evaluate(
+  candidate: Candidate,
+  stats: { rejectedVolume: number },
+): Promise<Passed | null> {
   const { mint } = candidate;
 
   // Free check first: if GMGN already told us this token is unsafe, do not
@@ -79,6 +82,14 @@ async function evaluate(candidate: Candidate): Promise<Passed | null> {
   const info = await getTokenInfo(mint);
   const totalFeeSol = Number(info.total_fee ?? 0);
   if (totalFeeSol < config.scan.minTotalFeeSol) return null;
+
+  // Checked here because token/info already carries volume_5m, so this filter
+  // costs no extra request and matches the number shown in the alert exactly.
+  const vol5mUsd = Number(info.price?.volume_5m ?? 0);
+  if (vol5mUsd < config.scan.minVol5mUsd) {
+    stats.rejectedVolume += 1;
+    return null;
+  }
 
   const security = await getTokenSecurity(mint);
   const verdict = evaluateSecurity(security);
@@ -107,7 +118,7 @@ async function evaluate(candidate: Candidate): Promise<Passed | null> {
     marketCap: candidate.marketCap,
     ageSeconds: candidate.ageSeconds,
     totalFeeSol,
-    vol5mUsd: Number(info.price?.volume_5m ?? 0),
+    vol5mUsd,
     tvlUsd: meteora.tvlUsd,
     poolCount: meteora.poolCount,
     ath: atAth
@@ -194,11 +205,12 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
     const batch = eligible.slice(0, config.scan.maxCandidatesPerCycle);
 
     const passed: Passed[] = [];
+    const stats = { rejectedVolume: 0 };
     let errors = 0;
 
     for (const candidate of batch) {
       try {
-        const result = await evaluate(candidate);
+        const result = await evaluate(candidate, stats);
         if (result) passed.push(result);
       } catch (error) {
         errors += 1;
@@ -224,6 +236,7 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
       passed: passed.length,
       delivered,
       rejected: batch.length - passed.length - errors,
+      rejectedVolume: stats.rejectedVolume,
       errors,
       gapMs: pacer.currentGapMs,
       ms: Date.now() - startedAt,
