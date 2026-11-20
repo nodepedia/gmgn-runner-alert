@@ -55,7 +55,6 @@ function buildKeyboard(payloads: AlertPayload[]): { inline_keyboard: InlineButto
   for (let i = 0; i < buttons.length; i += BUTTONS_PER_ROW) {
     rows.push(buttons.slice(i, i + BUTTONS_PER_ROW));
   }
-  rows.push([{ text: "🔗 GMGN Trending", url: "https://gmgn.ai/?chain=sol" }]);
 
   return { inline_keyboard: rows };
 }

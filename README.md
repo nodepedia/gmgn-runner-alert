@@ -44,8 +44,8 @@ Satu siklus = satu pesan, bukan satu pesan per token. Urut MC terbesar.
 3. $STONK · MC $25.38M · vol $4.8K
 ```
 
-Di bawah pesan ada tombol `📋 $SYMBOL` (satu per token, isinya mint untuk copy CA),
-3 tombol per baris, plus satu link GMGN Trending.
+Di bawah pesan hanya ada tombol `📋 $SYMBOL` (satu per token, isinya mint untuk
+copy CA), 3 tombol per baris. Tidak ada tombol link lain.
 
 Umur token, total fee, dan TVL Meteora **tetap dipakai sebagai filter/enrichment**
 tapi tidak ditampilkan di pesan. Kalau butuh format lama (satu pesan per token
