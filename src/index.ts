@@ -1,13 +1,16 @@
 import { config, summarizeConfig } from "./config.js";
 import { log } from "./logger.js";
 import {
+  evaluateSecurity,
   getTokenInfo,
   getTokenSecurity,
   getTrending,
+  peekTokenSecurity,
+  pacer,
   type RankItem,
 } from "./gmgn.js";
 import { getMeteoraTvl } from "./meteora.js";
-import { canAlert, getState, recordAlert } from "./db.js";
+import { canAlert, getState, pruneCache, recordAlert, recordWarmup } from "./db.js";
 import { buildMessage, sendAlert, sendTestMessage } from "./telegram.js";
 
 let cycleRunning = false;
@@ -18,6 +21,8 @@ interface Candidate {
   marketCap: number;
   ageSeconds: number;
 }
+
+type Outcome = "alert" | "warmup" | "rejected" | "error";
 
 function collectCandidates(rank: RankItem[], nowSeconds: number): Candidate[] {
   const candidates: Candidate[] = [];
@@ -42,13 +47,97 @@ function collectCandidates(rank: RankItem[], nowSeconds: number): Candidate[] {
   return candidates;
 }
 
-async function runCycle(): Promise<void> {
+async function processCandidate(
+  candidate: Candidate,
+  warmup: boolean,
+): Promise<Outcome> {
+  const { mint } = candidate;
+
+  // Free check first: if GMGN already told us this token is unsafe, do not
+  // spend a single request on it.
+  const cachedSecurity = peekTokenSecurity(mint);
+  if (cachedSecurity && !evaluateSecurity(cachedSecurity).ok) {
+    return "rejected";
+  }
+
+  const info = await getTokenInfo(mint);
+  const totalFeeSol = Number(info.total_fee ?? 0);
+  if (totalFeeSol < config.scan.minTotalFeeSol) return "rejected";
+
+  const security = await getTokenSecurity(mint);
+  const verdict = evaluateSecurity(security);
+  if (!verdict.ok) {
+    log.info(`security rejected $${String(candidate.item.symbol ?? mint)}`, {
+      blacklist: verdict.blacklist,
+      honeypot: verdict.honeypot,
+      mintRenounced: verdict.mintRenounced,
+      freezeRenounced: verdict.freezeRenounced,
+    });
+    return "rejected";
+  }
+
+  const meteora = await getMeteoraTvl(mint);
+  const previousState = getState(mint);
+  const previousAth = previousState?.last_ath_mc ?? 0;
+  const historyAth = Number(candidate.item.history_highest_market_cap ?? 0);
+  const atAth =
+    historyAth > 0 &&
+    candidate.marketCap >= historyAth * config.scan.athTolerance;
+
+  const payload = {
+    mint,
+    symbol: String(candidate.item.symbol ?? info.symbol ?? "?"),
+    name: String(candidate.item.name ?? info.name ?? ""),
+    marketCap: candidate.marketCap,
+    ageSeconds: candidate.ageSeconds,
+    totalFeeSol,
+    vol5mUsd: Number(info.price?.volume_5m ?? 0),
+    tvlUsd: meteora.tvlUsd,
+    poolCount: meteora.poolCount,
+    ath: atAth
+      ? {
+          isNew: historyAth > previousAth,
+          historyMarketCap: historyAth,
+          previousMarketCap: previousAth,
+        }
+      : undefined,
+  };
+
+  const state = {
+    mint,
+    symbol: payload.symbol,
+    marketCap: candidate.marketCap,
+    athMarketCap: historyAth,
+    tvlUsd: meteora.tvlUsd,
+  };
+
+  if (warmup) {
+    recordWarmup(state);
+    log.info(`warmup seeded $${payload.symbol}`, { mint });
+    return "warmup";
+  }
+
+  if (config.dryRun) {
+    log.info("dry run alert", { mint, symbol: payload.symbol });
+    console.log(buildMessage(payload));
+  } else {
+    await sendAlert(payload);
+  }
+
+  // Recorded in dry run too, so flipping DRY_RUN=false does not replay a burst
+  // of alerts for tokens the bot already surfaced while testing.
+  recordAlert(state);
+  return "alert";
+}
+
+async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
   if (cycleRunning) {
     log.warn("previous cycle still running, skipping this tick");
     return;
   }
   cycleRunning = true;
   const startedAt = Date.now();
+  const warmup = options.warmup === true;
 
   try {
     const rank = await getTrending();
@@ -57,89 +146,35 @@ async function runCycle(): Promise<void> {
     const eligible = collectCandidates(rank, nowSeconds);
     const batch = eligible.slice(0, config.scan.maxCandidatesPerCycle);
 
-    let passedFee = 0;
-    let alerts = 0;
+    const counts: Record<Outcome, number> = {
+      alert: 0,
+      warmup: 0,
+      rejected: 0,
+      error: 0,
+    };
 
     for (const candidate of batch) {
-      const { mint } = candidate;
-
-      const info = await getTokenInfo(mint, config.scan.feeCacheMs);
-      const totalFeeSol = Number(info.total_fee ?? 0);
-      if (totalFeeSol < config.scan.minTotalFeeSol) continue;
-
-      passedFee += 1;
-
-      const security = await getTokenSecurity(mint, config.scan.securityCacheMs);
-      const blacklist = Number(security.blacklist ?? 0);
-      const honeypot = Number(security.honeypot ?? 0);
-      const mintRenounced = security.renounced_mint === true;
-      const freezeRenounced = security.renounced_freeze_account === true;
-
-      if (blacklist !== 0 || honeypot !== 0 || !mintRenounced || !freezeRenounced) {
-        log.info(`security rejected ${candidate.item.symbol ?? mint}`, {
-          blacklist,
-          honeypot,
-          mintRenounced,
-          freezeRenounced,
-        });
-        continue;
-      }
-
-      // Refresh price/volume right before alerting; fee/security come from cache.
-      const freshInfo = await getTokenInfo(mint, 60_000);
-      const freshFee = Number(freshInfo.total_fee ?? 0);
-      if (freshFee < config.scan.minTotalFeeSol) continue;
-
-      const meteora = await getMeteoraTvl(mint);
-      const previousState = getState(mint);
-      const previousAth = previousState?.last_ath_mc ?? 0;
-      const historyAth = Number(candidate.item.history_highest_market_cap ?? 0);
-      const atAth =
-        historyAth > 0 &&
-        candidate.marketCap >= historyAth * config.scan.athTolerance;
-
-      const payload = {
-        mint,
-        symbol: String(candidate.item.symbol ?? freshInfo.symbol ?? "?"),
-        name: String(candidate.item.name ?? freshInfo.name ?? ""),
-        marketCap: candidate.marketCap,
-        ageSeconds: candidate.ageSeconds,
-        totalFeeSol: freshFee,
-        vol5mUsd: Number(freshInfo.price?.volume_5m ?? 0),
-        tvlUsd: meteora.tvlUsd,
-        poolCount: meteora.poolCount,
-        ath: atAth
-          ? {
-              isNew: historyAth > previousAth,
-              historyMarketCap: historyAth,
-              previousMarketCap: previousAth,
-            }
-          : undefined,
-      };
-
-      if (config.dryRun) {
-        log.info("dry run alert", { mint, symbol: payload.symbol });
-        console.log(buildMessage(payload));
-      } else {
-        await sendAlert(payload);
-        recordAlert({
-          mint,
-          symbol: payload.symbol,
-          marketCap: candidate.marketCap,
-          athMarketCap: historyAth,
-          tvlUsd: meteora.tvlUsd,
+      try {
+        const outcome = await processCandidate(candidate, warmup);
+        counts[outcome] += 1;
+      } catch (error) {
+        counts.error += 1;
+        log.error(`candidate failed $${String(candidate.item.symbol ?? candidate.mint)}`, {
+          mint: candidate.mint,
+          error: error instanceof Error ? error.message : String(error),
         });
       }
-
-      alerts += 1;
     }
 
     log.info("cycle done", {
       scanned: rank.length,
       eligible: eligible.length,
       batch: batch.length,
-      passedFee,
-      alerts,
+      alerts: counts.alert,
+      warmup: counts.warmup,
+      rejected: counts.rejected,
+      errors: counts.error,
+      gapMs: pacer.currentGapMs,
       ms: Date.now() - startedAt,
     });
   } catch (error) {
@@ -153,9 +188,16 @@ async function main(): Promise<void> {
   const args = new Set(process.argv.slice(2));
 
   log.info("starting gmgn-runner-alert", summarizeConfig());
+  pruneCache();
 
   if (args.has("--test")) {
     await sendTestMessage();
+    return;
+  }
+
+  if (args.has("--warmup")) {
+    await runCycle({ warmup: true });
+    log.info("warmup finished: current trending tokens recorded without alerts");
     return;
   }
 
@@ -166,15 +208,21 @@ async function main(): Promise<void> {
     return;
   }
 
-  const timer = setInterval(() => {
-    void runCycle();
-  }, config.scan.pollMs);
+  let timer: NodeJS.Timeout | undefined;
+
+  const loop = () => {
+    timer = setTimeout(async () => {
+      await runCycle();
+      loop();
+    }, config.scan.pollMs);
+  };
 
   log.info(`scheduler started, polling every ${config.scan.pollMs}ms`);
+  loop();
 
   const shutdown = (signal: string) => {
     log.info(`received ${signal}, shutting down`);
-    clearInterval(timer);
+    if (timer) clearTimeout(timer);
     setTimeout(() => process.exit(0), 250);
   };
 

@@ -30,8 +30,13 @@ export const config = {
   gmgn: {
     apiKey,
     baseUrl: process.env.GMGN_BASE_URL ?? "https://openapi.gmgn.ai",
-    ratePerSecond: num("GMGN_RATE_PER_SEC", 5),
-    burst: num("GMGN_BURST", 5),
+    /**
+     * GMGN's IP bucket bans for 30s once exceeded, and bursts are what trigger
+     * it. One request in flight, spaced by 300ms (~3.3 rps), is the measured
+     * safe floor; the pacer backs off automatically if that ever changes.
+     */
+    minGapMs: num("GMGN_MIN_GAP_MS", 300),
+    maxGapMs: num("GMGN_MAX_GAP_MS", 2_000),
   },
   telegram: {
     token: process.env.TELEGRAM_BOT_TOKEN?.trim() ?? "",
@@ -47,9 +52,13 @@ export const config = {
     minTotalFeeSol: num("MIN_TOTAL_FEE_SOL", 60),
     cooldownMs: num("COOLDOWN_MINUTES", 60) * 60_000,
     athTolerance: num("ATH_TOLERANCE", 0.995),
-    feeCacheMs: num("FEE_CACHE_MS", 10 * 60_000),
-    securityCacheMs: num("SECURITY_CACHE_MS", 60 * 60_000),
-    maxCandidatesPerCycle: num("MAX_CANDIDATES_PER_CYCLE", 30),
+    /** token/info holds total_fee + volume_5m; one fetch per cycle is enough. */
+    infoCacheMs: num("INFO_CACHE_MS", 55_000),
+    /** token/security barely changes; keep it for an hour. */
+    securityCacheMs: num("SECURITY_CACHE_MS", 3_600_000),
+    /** Meteora TVL is only used for display. */
+    meteoraCacheMs: num("METEORA_CACHE_MS", 300_000),
+    maxCandidatesPerCycle: num("MAX_CANDIDATES_PER_CYCLE", 40),
   },
   dbPath: process.env.DB_PATH ?? "data/bot.db",
   dryRun: bool("DRY_RUN", false),
@@ -59,6 +68,7 @@ export function summarizeConfig() {
   return {
     gmgnBaseUrl: config.gmgn.baseUrl,
     gmgnApiKey: `${config.gmgn.apiKey.slice(0, 6)}…`,
+    gmgnGapMs: config.gmgn.minGapMs,
     telegram: config.telegram.token ? "configured" : "MISSING",
     chatIds: config.telegram.chatIds.length > 0 ? config.telegram.chatIds : "MISSING",
     interval: config.scan.interval,
@@ -68,8 +78,9 @@ export function summarizeConfig() {
     minTotalFeeSol: config.scan.minTotalFeeSol,
     cooldownMinutes: config.scan.cooldownMs / 60_000,
     athTolerance: config.scan.athTolerance,
-    feeCacheMs: config.scan.feeCacheMs,
+    infoCacheMs: config.scan.infoCacheMs,
     securityCacheMs: config.scan.securityCacheMs,
+    meteoraCacheMs: config.scan.meteoraCacheMs,
     maxCandidatesPerCycle: config.scan.maxCandidatesPerCycle,
     pollMs: config.scan.pollMs,
     dryRun: config.dryRun,

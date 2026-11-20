@@ -1,4 +1,6 @@
+import { config } from "./config.js";
 import { log } from "./logger.js";
+import { getCache, setCache } from "./db.js";
 
 export interface MeteoraTvl {
   tvlUsd: number;
@@ -19,13 +21,15 @@ const ENDPOINTS = [
   "https://damm-v2.datapi.meteora.ag/pools",
 ] as const;
 
+const PAGE_SIZE = 100;
 const MAX_PAGES = 10;
+const cacheKey = (mint: string) => `meteora:${mint}`;
 
 async function fetchPools(endpoint: string, mint: string): Promise<MeteoraPool[]> {
   const matched: MeteoraPool[] = [];
 
   for (let page = 1; page <= MAX_PAGES; page += 1) {
-    const url = `${endpoint}?query=${encodeURIComponent(mint)}&page_size=100&page=${page}`;
+    const url = `${endpoint}?query=${encodeURIComponent(mint)}&page_size=${PAGE_SIZE}&page=${page}`;
     const response = await fetch(url, {
       headers: { accept: "application/json", "user-agent": "gmgn-runner-alert/1.0" },
       signal: AbortSignal.timeout(15_000),
@@ -58,6 +62,9 @@ async function fetchPools(endpoint: string, mint: string): Promise<MeteoraPool[]
 }
 
 export async function getMeteoraTvl(mint: string): Promise<MeteoraTvl> {
+  const cached = getCache<MeteoraTvl>(cacheKey(mint), config.scan.meteoraCacheMs);
+  if (cached) return cached;
+
   const results = await Promise.allSettled(
     ENDPOINTS.map((endpoint) => fetchPools(endpoint, mint)),
   );
@@ -78,5 +85,12 @@ export async function getMeteoraTvl(mint: string): Promise<MeteoraTvl> {
     }
   }
 
-  return { tvlUsd, poolCount: seen.size };
+  const summary: MeteoraTvl = { tvlUsd, poolCount: seen.size };
+
+  // Do not cache a total that lost one of the two endpoints to a timeout.
+  if (results.every((result) => result.status === "fulfilled")) {
+    setCache(cacheKey(mint), summary);
+  }
+
+  return summary;
 }

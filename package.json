@@ -11,6 +11,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "once": "node dist/index.js --once",
+    "warmup": "node dist/index.js --warmup",
     "test:telegram": "node dist/index.js --test",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
