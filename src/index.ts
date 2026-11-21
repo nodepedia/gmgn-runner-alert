@@ -403,7 +403,7 @@ async function main(): Promise<void> {
   loop();
 
   const shutdown = (signal: string) => {
-    log.info(`received ${signal}, shutting down`, { watchlistDropped: watchlist.size });
+    log.info(`received ${signal}, shutting down`, { watchlistPending: watchlist.size });
     if (timer) clearTimeout(timer);
     setTimeout(() => process.exit(0), 250);
   };
