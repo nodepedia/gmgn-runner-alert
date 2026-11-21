@@ -185,17 +185,18 @@ Desain yang dipakai:
 3. **AIMD backoff**: kalau tetap kena 429, gap digandakan (maks `GMGN_MAX_GAP_MS`)
    dan semua pemanggil menunggu `retry-after`, lalu perlahan turun lagi.
 4. **Cache persisten di SQLite** (`api_cache`), jadi restart tidak memicu cold fetch:
-   - `token/info` 55 detik (fee + volume 5m, sekali per siklus)
+   - `token/info` 55 detik (fee + volume 5m, dipakai ulang lintas siklus)
    - `token/security` 1 jam (jarang berubah)
    - Meteora TVL 5 menit
 5. **Prefilter murah**: `market/rank` sudah memuat `market_cap`,
    `creation_timestamp`, `history_highest_market_cap`. Token yang tidak lolos
-   age/MCAP/cooldown **tidak** memanggil endpoint token sama sekali.
+   age/MCAP **tidak** memanggil endpoint token sama sekali (cooldown runner
+   dicek setelah klasifikasi, supaya watchlist tidak ikut tertahan).
 6. **Token yang sudah diketahui jelek dilewati tanpa request**: security dari
    cache dicek lebih dulu, jadi token blacklist/honeypot tidak memakan kuota.
 7. **Kegagalan per token diisolasi**: satu 429/timeout tidak membatalkan
-   seluruh siklus, dan siklus berikutnya dijadwalkan 60 detik **setelah** siklus
-   sebelumnya selesai (tidak menumpuk).
+   seluruh siklus, dan siklus berikutnya dijadwalkan `POLL_INTERVAL_MS`
+   (default 30 detik) **setelah** siklus sebelumnya selesai (tidak menumpuk).
 
 Konsumsi nyata (limit 100, filter penuh, ~10 kandidat):
 
