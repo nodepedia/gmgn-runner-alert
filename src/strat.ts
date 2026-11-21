@@ -408,6 +408,26 @@ export const FIELDS: FieldSpec[] = [
     },
     { pattern: /^(digest|individual)$/ },
   ),
+  numberField(
+    "REPORT_WINDOW_MINUTES",
+    "report",
+    "watchlist digest cadence",
+    () => config.report.windowMinutes,
+    (value) => {
+      config.report.windowMinutes = value;
+    },
+    { min: 0, max: 60 },
+  ),
+  numberField(
+    "WATCHLIST_MAX",
+    "report",
+    "max tokens per watchlist",
+    () => config.report.watchlistMax,
+    (value) => {
+      config.report.watchlistMax = value;
+    },
+    { integer: true, min: 1, max: 100 },
+  ),
   textField(
     "REPORT_TIMEZONE",
     "report",

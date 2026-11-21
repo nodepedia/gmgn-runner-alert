@@ -11,12 +11,12 @@ import {
 } from "./gmgn.js";
 import { getMeteoraTvl } from "./meteora.js";
 import { canAlert, getState, pruneCache, recordAlert, recordWarmup } from "./db.js";
-import { buildReport } from "./report.js";
 import { initStrat, printEffectiveConfig, reloadStratIfChanged } from "./strat.js";
+import { buildWatchlist } from "./report.js";
 import {
   buildMessage,
   sendAlert,
-  sendReport,
+  sendWatchlist,
   sendTestMessage,
   type AlertPayload,
 } from "./telegram.js";
@@ -34,8 +34,10 @@ interface Candidate {
   ageSeconds: number;
 }
 
-interface Passed {
+interface Evaluated {
   payload: AlertPayload;
+  /** true = passes every filter including the 5m volume threshold. */
+  isRunner: boolean;
   state: {
     mint: string;
     symbol: string;
@@ -44,6 +46,31 @@ interface Passed {
     tvlUsd: number;
   };
 }
+
+interface CycleStats {
+  runners: number;
+  watchlistBuffered: number;
+  watchlistSent: number;
+  watchlistDropped: number;
+  rejectedTvl: number;
+}
+
+/**
+ * Tokens waiting for the next watchlist message, keyed by mint so a token that
+ * stays in trending appears once per message with its freshest numbers.
+ */
+const watchlist = new Map<string, AlertPayload>();
+
+function windowMs(): number {
+  return config.report.windowMinutes * 60_000;
+}
+
+function currentBucket(): number {
+  const span = windowMs();
+  return span > 0 ? Math.floor(Date.now() / span) : 0;
+}
+
+let windowBucket = currentBucket();
 
 function collectCandidates(rank: RankItem[], nowSeconds: number): Candidate[] {
   const candidates: Candidate[] = [];
@@ -60,19 +87,19 @@ function collectCandidates(rank: RankItem[], nowSeconds: number): Candidate[] {
 
     if (ageSeconds < config.scan.minAgeHours * 3_600) continue;
     if (marketCap < config.scan.minMarketCap) continue;
-    if (!canAlert(mint)) continue;
-
+    // Runner cooldown is applied after classification (see runCycle), so a
+    // token inside its cooldown can still be evaluated for the watchlist.
     candidates.push({ item, mint, marketCap, ageSeconds });
   }
 
   return candidates;
 }
 
-/** Returns the alert payload when the token passes every filter, else null. */
+/** Returns the evaluated token when it passes every hard filter, else null. */
 async function evaluate(
   candidate: Candidate,
-  stats: { rejectedVolume: number; rejectedTvl: number },
-): Promise<Passed | null> {
+  stats: CycleStats,
+): Promise<Evaluated | null> {
   const { mint } = candidate;
 
   // Free check first: if GMGN already told us this token is unsafe, do not
@@ -84,13 +111,10 @@ async function evaluate(
   const totalFeeSol = Number(info.total_fee ?? 0);
   if (totalFeeSol < config.scan.minTotalFeeSol) return null;
 
-  // Checked here because token/info already carries volume_5m, so this filter
-  // costs no extra request and matches the number shown in the alert exactly.
   const vol5mUsd = Number(info.price?.volume_5m ?? 0);
-  if (vol5mUsd < config.scan.minVol5mUsd) {
-    stats.rejectedVolume += 1;
-    return null;
-  }
+  // 5m volume no longer rejects: it separates real-time runners from the
+  // every-N-minutes watchlist.
+  const isRunner = config.scan.minVol5mUsd <= 0 || vol5mUsd >= config.scan.minVol5mUsd;
 
   // Meteora is an external (non-GMGN) call, so it runs before the security
   // request: a TVL reject then costs no GMGN quota at all.
@@ -151,6 +175,7 @@ async function evaluate(
 
   return {
     payload,
+    isRunner,
     state: {
       mint,
       symbol: payload.symbol,
@@ -161,47 +186,47 @@ async function evaluate(
   };
 }
 
-function printDryRun(passed: Passed[]): void {
-  if (config.report.mode === "digest") {
-    for (const part of buildReport(passed.map((item) => item.payload))) {
-      console.log(part.text);
-      console.log("");
-    }
-    return;
-  }
-
-  for (const item of passed) {
+/** Sends a runner immediately, then records it and drops it from the watchlist. */
+async function deliverRunner(item: Evaluated): Promise<void> {
+  if (config.dryRun) {
     console.log(buildMessage(item.payload));
     console.log("");
+  } else {
+    await sendAlert(item.payload);
   }
+
+  // Recorded only after a successful send: a failed delivery is retried next
+  // cycle instead of being lost.
+  recordAlert(item.state);
+  watchlist.delete(item.payload.mint);
 }
 
-async function deliver(passed: Passed[], warmup: boolean): Promise<void> {
-  if (passed.length === 0) return;
+/** Sends (or prints) the buffered watchlist and clears it. */
+async function flushWatchlist(): Promise<{ sent: number; dropped: number }> {
+  if (watchlist.size === 0) return { sent: 0, dropped: 0 };
 
-  if (warmup) {
-    for (const item of passed) {
-      recordWarmup(item.state);
-      log.info(`warmup seeded $${item.payload.symbol}`, { mint: item.state.mint });
+  const all = [...watchlist.values()].sort((a, b) => b.vol5mUsd - a.vol5mUsd);
+  const limit = Math.max(1, config.report.watchlistMax);
+  const shown = all.slice(0, limit);
+  const dropped = all.length - shown.length;
+  watchlist.clear();
+
+  try {
+    if (config.dryRun) {
+      console.log(buildWatchlist(shown, dropped).text);
+      console.log("");
+    } else {
+      await sendWatchlist(shown, dropped);
     }
-    return;
+  } catch (error) {
+    // Put everything back so the next window retries instead of losing tokens.
+    for (const payload of all) {
+      if (!watchlist.has(payload.mint)) watchlist.set(payload.mint, payload);
+    }
+    throw error;
   }
 
-  if (config.dryRun) {
-    printDryRun(passed);
-    // Recorded in dry run too, so flipping DRY_RUN=false does not replay a
-    // burst of alerts for tokens the bot already surfaced while testing.
-    for (const item of passed) recordAlert(item.state);
-    return;
-  }
-
-  if (config.report.mode === "digest") {
-    await sendReport(passed.map((item) => item.payload));
-  } else {
-    for (const item of passed) await sendAlert(item.payload);
-  }
-
-  for (const item of passed) recordAlert(item.state);
+  return { sent: shown.length, dropped };
 }
 
 async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
@@ -226,14 +251,20 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
     const eligible = collectCandidates(rank, nowSeconds);
     const batch = eligible.slice(0, config.scan.maxCandidatesPerCycle);
 
-    const passed: Passed[] = [];
-    const stats = { rejectedVolume: 0, rejectedTvl: 0 };
+    const evaluated: Evaluated[] = [];
+    const stats: CycleStats = {
+      runners: 0,
+      watchlistBuffered: 0,
+      watchlistSent: 0,
+      watchlistDropped: 0,
+      rejectedTvl: 0,
+    };
     let errors = 0;
 
     for (const candidate of batch) {
       try {
         const result = await evaluate(candidate, stats);
-        if (result) passed.push(result);
+        if (result) evaluated.push(result);
       } catch (error) {
         errors += 1;
         log.error(`candidate failed $${String(candidate.item.symbol ?? candidate.mint)}`, {
@@ -243,22 +274,66 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
       }
     }
 
-    let delivered = 0;
-    try {
-      await deliver(passed, warmup);
-      delivered = passed.length;
-    } catch (error) {
-      log.error("delivery failed", error instanceof Error ? error.message : String(error));
+    if (warmup) {
+      for (const item of evaluated) {
+        recordWarmup(item.state);
+        log.info(`warmup seeded $${item.payload.symbol}`, { mint: item.state.mint });
+      }
+    } else {
+      for (const item of evaluated) {
+        if (item.isRunner) {
+          if (!canAlert(item.payload.mint)) continue; // runner cooldown
+          try {
+            await deliverRunner(item);
+            stats.runners += 1;
+          } catch (error) {
+            errors += 1;
+            log.error(`runner delivery failed $${item.payload.symbol}`, {
+              mint: item.payload.mint,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+          continue;
+        }
+
+        // Watchlist is digest-only; individual mode keeps the old behaviour
+        // of not reporting tokens below the volume threshold.
+        if (config.report.mode === "digest") {
+          watchlist.set(item.payload.mint, item.payload);
+        }
+      }
+
+      stats.watchlistBuffered = watchlist.size;
+
+      const span = windowMs();
+      const bucket = currentBucket();
+      const due = span <= 0 ? watchlist.size > 0 : bucket !== windowBucket;
+      if (due) {
+        windowBucket = bucket;
+        if (watchlist.size > 0) {
+          try {
+            const flushed = await flushWatchlist();
+            stats.watchlistSent = flushed.sent;
+            stats.watchlistDropped = flushed.dropped;
+          } catch (error) {
+            log.error(
+              "watchlist delivery failed",
+              error instanceof Error ? error.message : String(error),
+            );
+          }
+        }
+      }
     }
 
     log.info("cycle done", {
       scanned: rank.length,
       eligible: eligible.length,
       batch: batch.length,
-      passed: passed.length,
-      delivered,
-      rejected: batch.length - passed.length - errors,
-      rejectedVolume: stats.rejectedVolume,
+      runners: stats.runners,
+      watchlist: watchlist.size,
+      watchlistSent: stats.watchlistSent,
+      watchlistDropped: stats.watchlistDropped,
+      rejected: batch.length - evaluated.length - errors,
       rejectedTvl: stats.rejectedTvl,
       errors,
       gapMs: pacer.currentGapMs,
@@ -299,6 +374,13 @@ async function main(): Promise<void> {
   await runCycle();
 
   if (args.has("--once")) {
+    // Manual runs should show their result instead of waiting for a boundary.
+    try {
+      const flushed = await flushWatchlist();
+      log.info("flushed on --once", flushed);
+    } catch (error) {
+      log.error("flush failed", error instanceof Error ? error.message : String(error));
+    }
     log.info("single cycle finished (--once)");
     return;
   }
@@ -313,10 +395,15 @@ async function main(): Promise<void> {
   };
 
   log.info(`scheduler started, polling every ${config.scan.pollMs}ms`);
+  if (config.report.mode === "digest") {
+    log.info(
+      `watchlist: one message every ${config.report.windowMinutes} minutes (max ${config.report.watchlistMax} tokens)`,
+    );
+  }
   loop();
 
   const shutdown = (signal: string) => {
-    log.info(`received ${signal}, shutting down`);
+    log.info(`received ${signal}, shutting down`, { watchlistDropped: watchlist.size });
     if (timer) clearTimeout(timer);
     setTimeout(() => process.exit(0), 250);
   };

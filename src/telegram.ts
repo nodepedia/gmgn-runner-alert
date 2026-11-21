@@ -1,7 +1,7 @@
 import { config } from "./config.js";
 import { log } from "./logger.js";
 import { escapeHtml, formatUsd } from "./format.js";
-import { buildReport, type InlineButton } from "./report.js";
+import { buildWatchlist, type InlineButton } from "./report.js";
 
 export interface AlertPayload {
   mint: string;
@@ -122,30 +122,23 @@ export async function sendAlert(payload: AlertPayload): Promise<void> {
 }
 
 /**
- * Sends one message per chunk of tokens. If Telegram rejects one chunk, the
- * error propagates and the caller must not record those tokens as alerted.
+ * Sends the watchlist digest. If Telegram rejects it, the error propagates so
+ * the caller can put the entries back and retry on the next cycle.
  */
-export async function sendReport(payloads: AlertPayload[]): Promise<number> {
-  const parts = buildReport(payloads);
-
-  for (const [index, part] of parts.entries()) {
-    await broadcast(part.text, part.keyboard);
-    if (parts.length > 1) {
-      log.info(`report part ${index + 1}/${parts.length} sent`, { tokens: part.tokens });
-    }
-  }
-
-  log.info("report sent", { tokens: payloads.length, parts: parts.length });
-  return parts.length;
+export async function sendWatchlist(payloads: AlertPayload[], dropped = 0): Promise<void> {
+  const part = buildWatchlist(payloads, dropped);
+  await broadcast(part.text, part.keyboard);
+  log.info("watchlist sent", { tokens: part.tokens, dropped });
 }
 
 export async function sendTestMessage(): Promise<void> {
   const text = [
     "✅ <b>gmgn-runner-alert aktif</b>",
     "",
-    `Report: <b>${config.report.mode}</b> · trending <b>${config.scan.interval}</b> · limit ${config.scan.limit}`,
+    `Runner: <b>real-time</b> (cooldown ${config.scan.cooldownMinutes} menit)`,
+    `Watchlist: tiap <b>${config.report.windowMinutes} menit</b> · maks ${config.report.watchlistMax} token`,
+    `Scan: trending <b>${config.scan.interval}</b> · limit ${config.scan.limit} · poll ${config.scan.pollMs / 1000}s`,
     `Filter: age ≥ ${config.scan.minAgeHours}h · MC ≥ ${formatUsd(config.scan.minMarketCap)} · fees ≥ ${config.scan.minTotalFeeSol} SOL · vol 5m ≥ ${formatUsd(config.scan.minVol5mUsd)} · TVL Meteora ≥ ${formatUsd(config.scan.minTvlUsd)}`,
-    `Cooldown: ${config.scan.cooldownMs / 60_000} menit`,
     "",
     "Bot siap memantau.",
   ].join("\n");

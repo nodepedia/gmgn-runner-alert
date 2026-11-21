@@ -15,7 +15,6 @@ export interface ReportPart {
 }
 
 const BUTTONS_PER_ROW = 3;
-const HEADER_BUDGET = 80;
 
 function clock(): string {
   return new Intl.DateTimeFormat("en-GB", {
@@ -37,7 +36,8 @@ function renderLine(payload: AlertPayload, index: number): string {
   return parts.join(" · ");
 }
 
-function buildKeyboard(payloads: AlertPayload[]): { inline_keyboard: InlineButton[][] } {
+/** One copy-CA button per token, with a mint suffix when symbols collide. */
+function tokenKeyboard(payloads: AlertPayload[]): { inline_keyboard: InlineButton[][] } {
   const totals = new Map<string, number>();
   for (const payload of payloads) {
     totals.set(payload.symbol, (totals.get(payload.symbol) ?? 0) + 1);
@@ -60,48 +60,27 @@ function buildKeyboard(payloads: AlertPayload[]): { inline_keyboard: InlineButto
 }
 
 /**
- * Builds one digest message per chunk of tokens. Tokens are ordered by market
- * cap (largest first) and numbering stays continuous across chunks.
+ * Builds the every-N-minutes watchlist: tokens that pass every hard filter
+ * except the 5m volume threshold. Ordered by 5m volume, capped by the caller.
  */
-export function buildReport(payloads: AlertPayload[]): ReportPart[] {
-  const sorted = [...payloads].sort((a, b) => b.marketCap - a.marketCap);
-  const chunks: { lines: string[]; items: AlertPayload[] }[] = [];
+export function buildWatchlist(payloads: AlertPayload[], dropped = 0): ReportPart {
+  const sorted = [...payloads].sort((a, b) => b.vol5mUsd - a.vol5mUsd);
+  const threshold =
+    config.scan.minVol5mUsd > 0
+      ? `<i>semua filter lolos · vol 5m &lt; ${formatUsd(config.scan.minVol5mUsd)}</i>`
+      : "";
 
-  let current: { lines: string[]; items: AlertPayload[] } = { lines: [], items: [] };
-  let size = 0;
-  let index = 0;
+  const blocks = [
+    `👀 <b>Watchlist</b> · ${sorted.length} token · ${clock()} ${config.report.tzLabel}`,
+  ];
+  if (threshold) blocks.push(threshold);
+  blocks.push("");
+  blocks.push(...sorted.map((payload, index) => renderLine(payload, index + 1)));
 
-  for (const payload of sorted) {
-    index += 1;
-    const line = renderLine(payload, index);
-    const tooMany = current.items.length >= config.report.maxTokensPerMessage;
-    const tooLong =
-      current.items.length > 0 &&
-      size + line.length + 1 > config.report.maxChars - HEADER_BUDGET;
-
-    if (tooMany || tooLong) {
-      chunks.push(current);
-      current = { lines: [], items: [] };
-      size = 0;
-    }
-
-    current.lines.push(line);
-    current.items.push(payload);
-    size += line.length + 1;
+  if (dropped > 0) {
+    blocks.push("");
+    blocks.push(`<i>+${dropped} lainnya (tercatat di log)</i>`);
   }
 
-  if (current.items.length > 0) chunks.push(current);
-
-  const total = sorted.length;
-  const time = clock();
-
-  return chunks.map((chunk, chunkIndex) => {
-    const partLabel = chunks.length > 1 ? ` · ${chunkIndex + 1}/${chunks.length}` : "";
-    const header = `🚀 <b>Runner Alert</b> · ${total} token · ${time} ${config.report.tzLabel}${partLabel}`;
-    return {
-      text: [header, "", ...chunk.lines].join("\n"),
-      keyboard: buildKeyboard(chunk.items),
-      tokens: chunk.items.length,
-    };
-  });
+  return { text: blocks.join("\n"), keyboard: tokenKeyboard(sorted), tokens: sorted.length };
 }

@@ -35,7 +35,9 @@ TRENDING_ORDER_BY=volume
 MIN_AGE_HOURS=48
 MIN_MARKET_CAP=2000000
 MIN_TOTAL_FEE_SOL=60
-# Volume 5 menit minimal dalam USD. 0 = filter dimatikan.
+# Ambang volume 5 menit (USD). Token >= ambang ini jadi RUNNER dan dikirim
+# real-time; di bawahnya masuk WATCHLIST (dikirim tiap REPORT_WINDOW_MINUTES).
+# 0 = semua token yang lolos filter dianggap runner.
 MIN_VOL5M_USD=10000
 # TVL minimal di Meteora (DLMM + DAMM v2) dalam USD. 0 = filter dimatikan.
 # Hanya likuiditas Meteora yang dihitung; likuiditas di DEX lain tidak.
@@ -44,11 +46,11 @@ MIN_TVL_USD=20000
 ATH_TOLERANCE=0.995
 
 # --- Siklus ---------------------------------------------------------------
-# Jeda antar siklus (60 detik = 1 menit).
-POLL_INTERVAL_MS=60000
+# Jeda antar siklus setelah siklus sebelumnya selesai.
+POLL_INTERVAL_MS=30000
 # Batas token yang dicek per siklus (sisanya menyusul siklus berikutnya).
 MAX_CANDIDATES_PER_CYCLE=25
-# Token yang sama tidak di-alert lagi selama N menit.
+# Cooldown alert RUNNER (real-time). Watchlist tidak memakai cooldown ini.
 COOLDOWN_MINUTES=60
 # true = cetak alert ke log, tidak kirim ke Telegram.
 DRY_RUN=false
@@ -61,8 +63,13 @@ SECURITY_CACHE_MS=3600000
 METEORA_CACHE_MS=300000
 
 # --- Format pesan ---------------------------------------------------------
-# digest = satu pesan per siklus | individual = satu pesan per token.
+# digest = runner real-time + watchlist tiap N menit
+# individual = hanya runner real-time, watchlist tidak dikirim
 REPORT_MODE=digest
+# Kirim watchlist tiap N menit (0 = tiap siklus).
+REPORT_WINDOW_MINUTES=5
+# Batas token per pesan watchlist (runner tidak dibatasi).
+WATCHLIST_MAX=20
 REPORT_TIMEZONE=Asia/Jakarta
 REPORT_TZ_LABEL=WIB
 REPORT_MAX_CHARS=3500

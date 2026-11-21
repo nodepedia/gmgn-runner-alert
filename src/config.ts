@@ -58,7 +58,7 @@ export const config = {
     interval: process.env.TRENDING_INTERVAL ?? "5m",
     limit: num("TRENDING_LIMIT", 100),
     orderBy: process.env.TRENDING_ORDER_BY ?? "volume",
-    pollMs: num("POLL_INTERVAL_MS", 60_000),
+    pollMs: num("POLL_INTERVAL_MS", 30_000),
     minAgeHours: num("MIN_AGE_HOURS", 48),
     minMarketCap: num("MIN_MARKET_CAP", 2_000_000),
     minTotalFeeSol: num("MIN_TOTAL_FEE_SOL", 60),
@@ -66,6 +66,7 @@ export const config = {
     minVol5mUsd: num("MIN_VOL5M_USD", 10_000),
     /** Meteora DLMM + DAMM v2 TVL; 0 disables the filter. */
     minTvlUsd: num("MIN_TVL_USD", 20_000),
+    /** Runner cooldown; the watchlist deliberately ignores it. */
     cooldownMinutes,
     cooldownMs: cooldownMinutes * 60_000,
     athTolerance: num("ATH_TOLERANCE", 0.995),
@@ -82,6 +83,10 @@ export const config = {
     mode: (process.env.REPORT_MODE ?? "digest").trim().toLowerCase() === "individual"
       ? ("individual" as const)
       : ("digest" as const),
+    /** Watchlist digest cadence; 0 = flush it every cycle. */
+    windowMinutes: num("REPORT_WINDOW_MINUTES", 5),
+    /** Max tokens per watchlist message (runner alerts are never capped). */
+    watchlistMax: num("WATCHLIST_MAX", 20),
     timezone: process.env.REPORT_TIMEZONE ?? "Asia/Jakarta",
     tzLabel: process.env.REPORT_TZ_LABEL ?? "WIB",
     maxChars: num("REPORT_MAX_CHARS", 3_500),
@@ -114,6 +119,8 @@ export function summarizeConfig() {
     maxCandidatesPerCycle: config.scan.maxCandidatesPerCycle,
     pollMs: config.scan.pollMs,
     reportMode: config.report.mode,
+    reportWindowMinutes: config.report.windowMinutes,
+    watchlistMax: config.report.watchlistMax,
     reportTimezone: config.report.timezone,
     dryRun: config.dryRun,
   };
