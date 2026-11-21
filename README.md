@@ -23,8 +23,8 @@ Volume 5m **bukan filter**, tapi pembeda:
 
 | Jalur | Syarat | Pengiriman |
 |---|---|---|
-| 🔥 **Runner** | semua filter + `vol 5m >= $10.000` | **real-time**, satu pesan per token |
-| 👀 **Watchlist** | semua filter, `vol 5m < $10.000` | **satu pesan tiap 5 menit** (maks 20 token) |
+| 🔥 **Runner** | semua filter + `vol 5m >= $30.000` | **real-time**, satu pesan per token |
+| 👀 **Watchlist** | semua filter, `vol 5m < $30.000` | **satu pesan tiap 10 menit** (maks 20 token) |
 
 Runner punya cooldown `COOLDOWN_MINUTES` (default 60) supaya token yang sedang
 ramai tidak di-alert tiap 30 detik. Watchlist **tanpa cooldown**: token yang
@@ -40,8 +40,8 @@ GMGN /v1/market/rank (interval 5m, limit 100, order volume)   tiap 30 detik
   -> /v1/token/info      (total_fee, volume_5m)
   -> Meteora DLMM + DAMM v2 (sum tvl, filter >= $20K)
   -> /v1/token/security  (blacklist, honeypot, renounced)
-  -> vol 5m >= $10K ?  runner -> kirim SEKARANG (cooldown 60 menit)
-                       watchlist -> buffer, kirim tiap 5 menit (maks 20)
+  -> vol 5m >= $30K ?  runner -> kirim SEKARANG (cooldown 60 menit)
+                       watchlist -> buffer, kirim tiap 10 menit (maks 20)
 ```
 
 ## Format alert
@@ -58,11 +58,11 @@ CA: 4CxjZyMNoF1p6eXHXHv1TWpS2X47CuUmLwtGe18spump
 [ 📋 Copy CA ]
 ```
 
-**Watchlist (tiap 5 menit, urut vol 5m):**
+**Watchlist (tiap 10 menit, urut vol 5m):**
 
 ```
 👀 Watchlist · 9 token · 20:15 WIB
-semua filter lolos · vol 5m < $10.0K
+semua filter lolos · vol 5m < $30.0K
 
 1. $USELESS · MC $81.29M · vol $3.9K
 2. $ANSEM · MC $31.72M · vol $6.8K
@@ -75,7 +75,7 @@ Tombol `📋` berisi mint token (copy CA), 3 per baris. Kalau dua token punya
 simbol sama, labelnya diberi pembeda mint. Umur token, total fee, dan TVL
 dipakai sebagai filter tapi tidak ditampilkan.
 
-Watchlist dikirim di batas jam dinding (20:10, 20:15, 20:20), hanya kalau ada
+Watchlist dikirim di batas jam dinding (20:10, 20:20, 20:30), hanya kalau ada
 isinya. `REPORT_MODE=individual` mematikan watchlist (hanya runner real-time).
 
 ## Setup
@@ -121,11 +121,11 @@ ditulis di `strat.conf` juga tetap dibaca.
 | telegram | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | dari `.env` |
 | filter | `TRENDING_INTERVAL` / `TRENDING_LIMIT` / `TRENDING_ORDER_BY` | 5m / 100 / volume |
 | filter | `MIN_AGE_HOURS` / `MIN_MARKET_CAP` / `MIN_TOTAL_FEE_SOL` | 48 / 2e6 / 60 |
-| filter | `MIN_VOL5M_USD` / `MIN_TVL_USD` / `ATH_TOLERANCE` | 10000 / 20000 / 0.995 |
+| filter | `MIN_VOL5M_USD` / `MIN_TVL_USD` / `ATH_TOLERANCE` | 30000 / 20000 / 0.995 |
 | runtime | `POLL_INTERVAL_MS` / `MAX_CANDIDATES_PER_CYCLE` / `COOLDOWN_MINUTES` | 30000 / 25 / 60 |
 | runtime | `DRY_RUN` / `DB_PATH` | false / data/bot.db |
 | cache | `INFO_CACHE_MS` / `SECURITY_CACHE_MS` / `METEORA_CACHE_MS` | 55s / 1h / 5m |
-| report | `REPORT_MODE` / `REPORT_WINDOW_MINUTES` / `WATCHLIST_MAX` | digest / 5 / 20 |
+| report | `REPORT_MODE` / `REPORT_WINDOW_MINUTES` / `WATCHLIST_MAX` | digest / 10 / 20 |
 | report | `REPORT_TIMEZONE` / `REPORT_TZ_LABEL` | Asia/Jakarta / WIB |
 
 Nilai divalidasi: angka di luar rentang, enum salah, atau key typo **tidak**
@@ -146,7 +146,7 @@ pm2 logs gmgn-runner-alert
 ## Catatan
 
 - `REPORT_MODE=digest` (default): runner real-time + watchlist tiap
-  `REPORT_WINDOW_MINUTES`. `REPORT_MODE=individual`: hanya runner, tanpa watchlist.
+  `REPORT_WINDOW_MINUTES` (default 10). `REPORT_MODE=individual`: hanya runner, tanpa watchlist.
 - Watchlist dibatasi `WATCHLIST_MAX` token urut vol 5m; sisanya tetap tercatat di
   log (`+N lainnya`).
 - Kalau dua token punya simbol sama, label tombolnya diberi pembeda mint

@@ -63,7 +63,7 @@ export const config = {
     minMarketCap: num("MIN_MARKET_CAP", 2_000_000),
     minTotalFeeSol: num("MIN_TOTAL_FEE_SOL", 60),
     /** price.volume_5m from token/info; 0 disables the filter. */
-    minVol5mUsd: num("MIN_VOL5M_USD", 10_000),
+    minVol5mUsd: num("MIN_VOL5M_USD", 30_000),
     /** Meteora DLMM + DAMM v2 TVL; 0 disables the filter. */
     minTvlUsd: num("MIN_TVL_USD", 20_000),
     /** Runner cooldown; the watchlist deliberately ignores it. */
@@ -84,7 +84,7 @@ export const config = {
       ? ("individual" as const)
       : ("digest" as const),
     /** Watchlist digest cadence; 0 = flush it every cycle. */
-    windowMinutes: num("REPORT_WINDOW_MINUTES", 5),
+    windowMinutes: num("REPORT_WINDOW_MINUTES", 10),
     /** Max tokens per watchlist message (runner alerts are never capped). */
     watchlistMax: num("WATCHLIST_MAX", 20),
     timezone: process.env.REPORT_TIMEZONE ?? "Asia/Jakarta",
