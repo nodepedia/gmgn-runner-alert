@@ -67,7 +67,7 @@ METEORA_CACHE_MS=300000
 # individual = hanya runner real-time, watchlist tidak dikirim
 REPORT_MODE=digest
 # Kirim watchlist tiap N menit (0 = tiap siklus).
-REPORT_WINDOW_MINUTES=10
+REPORT_WINDOW_MINUTES=30
 # Batas token per pesan watchlist (runner tidak dibatasi).
 WATCHLIST_MAX=20
 REPORT_TIMEZONE=Asia/Jakarta

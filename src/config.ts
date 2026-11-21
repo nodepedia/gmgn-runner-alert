@@ -84,7 +84,7 @@ export const config = {
       ? ("individual" as const)
       : ("digest" as const),
     /** Watchlist digest cadence; 0 = flush it every cycle. */
-    windowMinutes: num("REPORT_WINDOW_MINUTES", 10),
+    windowMinutes: num("REPORT_WINDOW_MINUTES", 30),
     /** Max tokens per watchlist message (runner alerts are never capped). */
     watchlistMax: num("WATCHLIST_MAX", 20),
     timezone: process.env.REPORT_TIMEZONE ?? "Asia/Jakarta",
