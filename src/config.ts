@@ -89,8 +89,6 @@ export const config = {
     watchlistMax: num("WATCHLIST_MAX", 20),
     timezone: process.env.REPORT_TIMEZONE ?? "Asia/Jakarta",
     tzLabel: process.env.REPORT_TZ_LABEL ?? "WIB",
-    maxChars: num("REPORT_MAX_CHARS", 3_500),
-    maxTokensPerMessage: num("REPORT_MAX_TOKENS", 20),
   },
   dbPath: process.env.DB_PATH ?? "data/bot.db",
   dryRun: bool("DRY_RUN", false),

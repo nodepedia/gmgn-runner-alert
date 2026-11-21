@@ -127,7 +127,6 @@ ditulis di `strat.conf` juga tetap dibaca.
 | cache | `INFO_CACHE_MS` / `SECURITY_CACHE_MS` / `METEORA_CACHE_MS` | 55s / 1h / 5m |
 | report | `REPORT_MODE` / `REPORT_WINDOW_MINUTES` / `WATCHLIST_MAX` | digest / 5 / 20 |
 | report | `REPORT_TIMEZONE` / `REPORT_TZ_LABEL` | Asia/Jakarta / WIB |
-| report | `REPORT_MAX_CHARS` / `REPORT_MAX_TOKENS` | 3500 / 20 |
 
 Nilai divalidasi: angka di luar rentang, enum salah, atau key typo **tidak**
 mengubah apa pun. Nilai lama tetap dipakai dan alasannya masuk log

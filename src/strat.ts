@@ -448,26 +448,6 @@ export const FIELDS: FieldSpec[] = [
     },
     { maxLength: 8 },
   ),
-  numberField(
-    "REPORT_MAX_CHARS",
-    "report",
-    "max characters per message",
-    () => config.report.maxChars,
-    (value) => {
-      config.report.maxChars = value;
-    },
-    { integer: true, min: 500, max: 4_096 },
-  ),
-  numberField(
-    "REPORT_MAX_TOKENS",
-    "report",
-    "max tokens per message",
-    () => config.report.maxTokensPerMessage,
-    (value) => {
-      config.report.maxTokensPerMessage = value;
-    },
-    { integer: true, min: 1, max: 50 },
-  ),
 ];
 
 const fieldByKey = new Map(FIELDS.map((field) => [field.key, field]));
