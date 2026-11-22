@@ -578,6 +578,18 @@ export function applyStratText(text: string, file = "strat.conf"): StratResult {
     });
   }
 
+  // Not fatal, but almost certainly a mistake: the runner threshold would
+  // swallow every token the watchlist could ever show.
+  if (
+    config.scan.minWatchlistVol5mUsd > 0 &&
+    config.scan.minVol5mUsd > 0 &&
+    config.scan.minWatchlistVol5mUsd >= config.scan.minVol5mUsd
+  ) {
+    log.warn(
+      `MIN_WATCHLIST_VOL5M_USD (${config.scan.minWatchlistVol5mUsd}) >= MIN_VOL5M_USD (${config.scan.minVol5mUsd}): watchlist stays empty`,
+    );
+  }
+
   return {
     file,
     parsed: entries.length,
