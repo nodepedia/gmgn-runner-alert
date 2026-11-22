@@ -62,8 +62,10 @@ export const config = {
     minAgeHours: num("MIN_AGE_HOURS", 48),
     minMarketCap: num("MIN_MARKET_CAP", 2_000_000),
     minTotalFeeSol: num("MIN_TOTAL_FEE_SOL", 60),
-    /** price.volume_5m from token/info; 0 disables the filter. */
+    /** price.volume_5m from token/info; runner threshold; 0 = every token runs. */
     minVol5mUsd: num("MIN_VOL5M_USD", 30_000),
+    /** Floor for the watchlist; below this the token is dropped entirely. */
+    minWatchlistVol5mUsd: num("MIN_WATCHLIST_VOL5M_USD", 5_000),
     /** Meteora DLMM + DAMM v2 TVL; 0 disables the filter. */
     minTvlUsd: num("MIN_TVL_USD", 20_000),
     /** Runner cooldown; the watchlist deliberately ignores it. */
@@ -108,6 +110,7 @@ export function summarizeConfig() {
     minMarketCap: config.scan.minMarketCap,
     minTotalFeeSol: config.scan.minTotalFeeSol,
     minVol5mUsd: config.scan.minVol5mUsd,
+    minWatchlistVol5mUsd: config.scan.minWatchlistVol5mUsd,
     minTvlUsd: config.scan.minTvlUsd,
     cooldownMinutes: config.scan.cooldownMinutes,
     athTolerance: config.scan.athTolerance,

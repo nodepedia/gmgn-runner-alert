@@ -24,7 +24,8 @@ Volume 5m **bukan filter**, tapi pembeda:
 | Jalur | Syarat | Pengiriman |
 |---|---|---|
 | 🔥 **Runner** | semua filter + `vol 5m >= $30.000` | **real-time**, satu pesan per token |
-| 👀 **Watchlist** | semua filter, `vol 5m < $30.000` | **satu pesan tiap 30 menit** (maks 20 token) |
+| 👀 **Watchlist** | semua filter, `$5.000 <= vol 5m < $30.000` | **satu pesan tiap 30 menit** (maks 20 token) |
+| — | vol 5m `< $5.000` | tidak dilaporkan (hanya `belowWatchlist` di log) |
 
 Runner punya cooldown `COOLDOWN_MINUTES` (default 60) supaya token yang sedang
 ramai tidak di-alert tiap 30 detik. Watchlist **tanpa cooldown**: token yang
@@ -38,10 +39,11 @@ Enrichment: tag ATH dari `market_cap >= history_highest_market_cap`.
 GMGN /v1/market/rank (interval 5m, limit 100, order volume)   tiap 30 detik
   -> prefilter age + market cap
   -> /v1/token/info      (total_fee, volume_5m)
+  -> vol 5m < $5K  ? drop (tidak memakai request Meteora/security)
   -> Meteora DLMM + DAMM v2 (sum tvl, filter >= $20K)
   -> /v1/token/security  (blacklist, honeypot, renounced)
-  -> vol 5m >= $30K ?  runner -> kirim SEKARANG (cooldown 60 menit)
-                       watchlist -> buffer, kirim tiap 30 menit (maks 20)
+  -> vol 5m >= $30K ? runner -> kirim SEKARANG (cooldown 60 menit)
+                    : watchlist -> buffer, kirim tiap 30 menit (maks 20)
 ```
 
 ## Format alert
@@ -62,7 +64,7 @@ CA: 4CxjZyMNoF1p6eXHXHv1TWpS2X47CuUmLwtGe18spump
 
 ```
 👀 Watchlist · 9 token · 20:15 WIB
-semua filter lolos · vol 5m < $30.0K
+semua filter lolos · $5.0K ≤ vol 5m < $30.0K
 
 1. $USELESS · MC $81.29M · vol $3.9K
 2. $ANSEM · MC $31.72M · vol $6.8K
@@ -121,7 +123,8 @@ ditulis di `strat.conf` juga tetap dibaca.
 | telegram | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | dari `.env` |
 | filter | `TRENDING_INTERVAL` / `TRENDING_LIMIT` / `TRENDING_ORDER_BY` | 5m / 100 / volume |
 | filter | `MIN_AGE_HOURS` / `MIN_MARKET_CAP` / `MIN_TOTAL_FEE_SOL` | 48 / 2e6 / 60 |
-| filter | `MIN_VOL5M_USD` / `MIN_TVL_USD` / `ATH_TOLERANCE` | 30000 / 20000 / 0.995 |
+| filter | `MIN_VOL5M_USD` / `MIN_WATCHLIST_VOL5M_USD` | 30000 / 5000 |
+| filter | `MIN_TVL_USD` / `ATH_TOLERANCE` | 20000 / 0.995 |
 | runtime | `POLL_INTERVAL_MS` / `MAX_CANDIDATES_PER_CYCLE` / `COOLDOWN_MINUTES` | 30000 / 25 / 60 |
 | runtime | `DRY_RUN` / `DB_PATH` | false / data/bot.db |
 | cache | `INFO_CACHE_MS` / `SECURITY_CACHE_MS` / `METEORA_CACHE_MS` | 55s / 1h / 5m |

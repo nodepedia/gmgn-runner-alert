@@ -293,6 +293,16 @@ export const FIELDS: FieldSpec[] = [
     { min: 0, max: 1e12 },
   ),
   numberField(
+    "MIN_WATCHLIST_VOL5M_USD",
+    "filter",
+    "watchlist floor 5m volume (USD, 0=off)",
+    () => config.scan.minWatchlistVol5mUsd,
+    (value) => {
+      config.scan.minWatchlistVol5mUsd = value;
+    },
+    { min: 0, max: 1e12 },
+  ),
+  numberField(
     "MIN_TVL_USD",
     "filter",
     "minimum Meteora TVL (USD, 0=off)",

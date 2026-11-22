@@ -36,7 +36,7 @@ interface Candidate {
 
 interface Evaluated {
   payload: AlertPayload;
-  /** true = passes every filter including the 5m volume threshold. */
+  /** true = passes every filter including the runner volume threshold. */
   isRunner: boolean;
   state: {
     mint: string;
@@ -49,6 +49,8 @@ interface Evaluated {
 
 interface CycleStats {
   runners: number;
+  /** Volume below MIN_WATCHLIST_VOL5M_USD: reported nowhere, logged only. */
+  belowWatchlist: number;
   watchlistBuffered: number;
   watchlistSent: number;
   watchlistDropped: number;
@@ -115,6 +117,13 @@ async function evaluate(
   // 5m volume no longer rejects: it separates real-time runners from the
   // every-N-minutes watchlist.
   const isRunner = config.scan.minVol5mUsd <= 0 || vol5mUsd >= config.scan.minVol5mUsd;
+
+  // Below the watchlist floor the token is not reported at all. Checked before
+  // Meteora and token/security, so quiet tokens cost no further requests.
+  if (!isRunner && vol5mUsd < config.scan.minWatchlistVol5mUsd) {
+    stats.belowWatchlist += 1;
+    return null;
+  }
 
   // Meteora is an external (non-GMGN) call, so it runs before the security
   // request: a TVL reject then costs no GMGN quota at all.
@@ -254,6 +263,7 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
     const evaluated: Evaluated[] = [];
     const stats: CycleStats = {
       runners: 0,
+      belowWatchlist: 0,
       watchlistBuffered: 0,
       watchlistSent: 0,
       watchlistDropped: 0,
@@ -335,6 +345,7 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
       watchlistDropped: stats.watchlistDropped,
       rejected: batch.length - evaluated.length - errors,
       rejectedTvl: stats.rejectedTvl,
+      belowWatchlist: stats.belowWatchlist,
       errors,
       gapMs: pacer.currentGapMs,
       pollMs: config.scan.pollMs,

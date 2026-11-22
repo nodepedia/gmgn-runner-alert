@@ -139,6 +139,7 @@ export async function sendTestMessage(): Promise<void> {
     `Watchlist: tiap <b>${config.report.windowMinutes} menit</b> · maks ${config.report.watchlistMax} token`,
     `Scan: trending <b>${config.scan.interval}</b> · limit ${config.scan.limit} · poll ${config.scan.pollMs / 1000}s`,
     `Filter: age ≥ ${config.scan.minAgeHours}h · MC ≥ ${formatUsd(config.scan.minMarketCap)} · fees ≥ ${config.scan.minTotalFeeSol} SOL · vol 5m ≥ ${formatUsd(config.scan.minVol5mUsd)} · TVL Meteora ≥ ${formatUsd(config.scan.minTvlUsd)}`,
+    `Watchlist: vol 5m ≥ ${formatUsd(config.scan.minWatchlistVol5mUsd)} (di bawah runner)`,
     "",
     "Bot siap memantau.",
   ].join("\n");

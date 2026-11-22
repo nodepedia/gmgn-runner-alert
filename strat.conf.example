@@ -36,9 +36,11 @@ MIN_AGE_HOURS=48
 MIN_MARKET_CAP=2000000
 MIN_TOTAL_FEE_SOL=60
 # Ambang volume 5 menit (USD). Token >= ambang ini jadi RUNNER dan dikirim
-# real-time; di bawahnya masuk WATCHLIST (dikirim tiap REPORT_WINDOW_MINUTES).
-# 0 = semua token yang lolos filter dianggap runner.
+# real-time. 0 = semua token yang lolos filter dianggap runner.
 MIN_VOL5M_USD=30000
+# Batas bawah WATCHLIST (USD). Token dengan vol 5m di bawah ini tidak dikirim
+# sama sekali (hanya dihitung di log sebagai belowWatchlist). 0 = tanpa batas.
+MIN_WATCHLIST_VOL5M_USD=5000
 # TVL minimal di Meteora (DLMM + DAMM v2) dalam USD. 0 = filter dimatikan.
 # Hanya likuiditas Meteora yang dihitung; likuiditas di DEX lain tidak.
 MIN_TVL_USD=20000

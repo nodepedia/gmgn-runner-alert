@@ -65,15 +65,22 @@ function tokenKeyboard(payloads: AlertPayload[]): { inline_keyboard: InlineButto
  */
 export function buildWatchlist(payloads: AlertPayload[], dropped = 0): ReportPart {
   const sorted = [...payloads].sort((a, b) => b.vol5mUsd - a.vol5mUsd);
-  const threshold =
-    config.scan.minVol5mUsd > 0
-      ? `<i>semua filter lolos · vol 5m &lt; ${formatUsd(config.scan.minVol5mUsd)}</i>`
-      : "";
+  const floor = config.scan.minWatchlistVol5mUsd;
+  const ceiling = config.scan.minVol5mUsd;
+  let range = "";
+  if (ceiling > 0) {
+    range =
+      floor > 0
+        ? `<i>semua filter lolos · ${formatUsd(floor)} ≤ vol 5m &lt; ${formatUsd(ceiling)}</i>`
+        : `<i>semua filter lolos · vol 5m &lt; ${formatUsd(ceiling)}</i>`;
+  } else if (floor > 0) {
+    range = `<i>semua filter lolos · vol 5m ≥ ${formatUsd(floor)}</i>`;
+  }
 
   const blocks = [
     `👀 <b>Watchlist</b> · ${sorted.length} token · ${clock()} ${config.report.tzLabel}`,
   ];
-  if (threshold) blocks.push(threshold);
+  if (range) blocks.push(range);
   blocks.push("");
   blocks.push(...sorted.map((payload, index) => renderLine(payload, index + 1)));
 
