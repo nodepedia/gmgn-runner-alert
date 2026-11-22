@@ -24,39 +24,21 @@ type Keyboard = { inline_keyboard: InlineButton[][] };
 
 export function buildMessage(payload: AlertPayload): string {
   const symbol = escapeHtml(payload.symbol || "?");
-  const lines: string[] = [`🚀 <b>$${symbol}</b> — Runner Alert`];
-
-  if (
-    payload.name &&
-    payload.name.trim().toLowerCase() !== payload.symbol.trim().toLowerCase()
-  ) {
-    lines.push(`<i>${escapeHtml(payload.name)}</i>`);
-  }
-
   const stats = [
     `MC <b>${formatUsd(payload.marketCap)}</b>`,
     `Vol 5m <b>${formatUsd(payload.vol5mUsd)}</b>`,
   ];
   if (payload.ath) stats.push("🔥<b>ATH</b>");
 
-  lines.push("");
-  lines.push(stats.join(" · "));
-  lines.push("");
-  lines.push(`<b>CA:</b> <code>${payload.mint}</code>`);
-
-  return lines.join("\n");
+  return [`🚀 <b>$${symbol}</b> — Runner Alert`, "", stats.join(" · ")].join("\n");
 }
 
-function buildKeyboard(mint: string): Keyboard {
+export function buildKeyboard(mint: string): Keyboard {
   return {
     inline_keyboard: [
       [
         { text: "📋 Copy CA", copy_text: { text: mint } },
         { text: "GMGN", url: `https://gmgn.ai/sol/token/${mint}` },
-      ],
-      [
-        { text: "Dexscreener", url: `https://dexscreener.com/solana/${mint}` },
-        { text: "Solscan", url: `https://solscan.io/token/${mint}` },
       ],
     ],
   };

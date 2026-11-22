@@ -52,13 +52,13 @@ GMGN /v1/market/rank (interval 5m, limit 100, order volume)   tiap 30 detik
 
 ```
 🚀 $FIONA — Runner Alert
-Fiona the Hippo
 
 MC $2.64M · Vol 5m $92.3K · 🔥ATH
-
-CA: 4CxjZyMNoF1p6eXHXHv1TWpS2X47CuUmLwtGe18spump
-[ 📋 Copy CA ]
+[ 📋 Copy CA ] [ GMGN ]
 ```
+
+Badge `🔥ATH` hanya muncul kalau token berada di ATH. Baris `CA:` tidak lagi
+ditulis di teks pesan; CA disalin lewat tombol `📋 Copy CA`.
 
 **Watchlist (tiap 30 menit, urut vol 5m):**
 
