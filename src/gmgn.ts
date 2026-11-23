@@ -3,6 +3,13 @@ import { config } from "./config.js";
 import { log } from "./logger.js";
 import { getCache, setCache } from "./db.js";
 import { Pacer } from "./ratelimit.js";
+import {
+  klineCacheTtlMs,
+  parseGmgnKline,
+  resolutionToMs,
+  selectClosedCandles,
+  type Candle,
+} from "./supertrend.js";
 
 export interface RankItem {
   address: string;
@@ -218,6 +225,61 @@ export async function getTokenSecurity(
 
   setCache(securityKey(mint), value);
   return value;
+}
+
+interface KlineCacheEntry {
+  /** Absolute unix ms. A closed-candle snapshot is stale once the next bar closes. */
+  expiresAt: number;
+  candles: Candle[];
+}
+
+const klineKey = (mint: string, resolution: string, limit: number) =>
+  `kline:${resolution}:${limit}:${mint}`;
+
+/**
+ * OHLCV for the Supertrend gate.
+ *
+ * Source: GMGN OpenAPI `GET /v1/market/token_kline`, the same route as
+ * gmgn-cli `OpenApiClient.getTokenKline` (chain, address, resolution, and
+ * `from`/`to` in milliseconds). The call goes through `request`, so it shares
+ * the GMGN pacer. This route weighs 2 on the IP bucket.
+ *
+ * The returned candles are closed only. The forming bar is dropped before the
+ * snapshot is cached, and the cache expires at the next bar close (or sooner,
+ * when SUPERTREND_CACHE_MS is shorter).
+ */
+export async function getTokenKline(mint: string): Promise<Candle[]> {
+  const resolution = config.supertrend.timeframe;
+  const limit = config.supertrend.candles;
+  const resolutionMs = resolutionToMs(resolution);
+  const nowMs = Date.now();
+  const key = klineKey(mint, resolution, limit);
+  const maxAgeMs = Math.max(config.supertrend.cacheMs, resolutionMs);
+
+  if (config.supertrend.cacheMs > 0) {
+    const cached = getCache<KlineCacheEntry>(key, maxAgeMs);
+    if (cached && cached.expiresAt > nowMs && Array.isArray(cached.candles)) {
+      return cached.candles;
+    }
+  }
+
+  const data = await request("/v1/market/token_kline", {
+    chain: "sol",
+    address: mint,
+    resolution,
+    from: nowMs - (limit + 2) * resolutionMs,
+    to: nowMs,
+  });
+
+  const closed = selectClosedCandles(parseGmgnKline(data), resolutionMs, nowMs, limit);
+  if (config.supertrend.cacheMs > 0 && closed.length > 0) {
+    const entry: KlineCacheEntry = {
+      expiresAt: nowMs + klineCacheTtlMs(nowMs, resolutionMs, config.supertrend.cacheMs),
+      candles: closed,
+    };
+    setCache(key, entry);
+  }
+  return closed;
 }
 
 export interface SecurityVerdict {

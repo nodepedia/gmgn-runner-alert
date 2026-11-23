@@ -64,6 +64,29 @@ INFO_CACHE_MS=55000
 SECURITY_CACHE_MS=3600000
 METEORA_CACHE_MS=300000
 
+# --- Supertrend (gerbang tren, hanya jalur Runner) ------------------------
+# Setelah token lolos semua filter dan vol 5m >= MIN_VOL5M_USD, alert
+# real-time hanya dikirim kalau Supertrend bullish pada candle TERAKHIR
+# yang sudah tutup. Bearish tidak dikirim dan tidak memulai cooldown,
+# jadi alert tetap bisa keluar begitu tren berbalik selagi volume tinggi.
+# Sumber candle: GMGN GET /v1/market/token_kline (lewat pacer yang sama).
+# Matikan gerbang: SUPERTREND_ENABLED=false
+SUPERTREND_ENABLED=true
+# ATR period dan multiplier (TradingView ta.supertrend).
+SUPERTREND_PERIOD=10
+SUPERTREND_MULTIPLIER=3
+# 30s | 1m | 5m | 15m | 1h | 4h | 1d. Bukan 1s (Pro only).
+SUPERTREND_TIMEFRAME=5m
+# Jumlah candle tertutup yang diambil. Candle yang masih berjalan dibuang.
+SUPERTREND_CANDLES=100
+# Candle gagal / kurang dari period: skip = jangan alert, allow = kirim tetap.
+SUPERTREND_ON_ERROR=skip
+# true = watchlist ikut gerbang bullish yang sama. Default mati.
+SUPERTREND_WATCHLIST=false
+# Batas atas cache kline (ms). Efektifnya dipotong sampai candle berikutnya
+# tutup, supaya candle yang belum selesai tidak dipakai ulang. 0 = tanpa cache.
+SUPERTREND_CACHE_MS=240000
+
 # --- Format pesan ---------------------------------------------------------
 # digest = runner real-time + watchlist tiap N menit
 # individual = hanya runner real-time, watchlist tidak dikirim

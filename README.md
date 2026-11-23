@@ -31,6 +31,11 @@ Runner punya cooldown `COOLDOWN_MINUTES` (default 60) supaya token yang sedang
 ramai tidak di-alert tiap 30 detik. Watchlist **tanpa cooldown**: token yang
 masih trending akan muncul lagi di pesan berikutnya.
 
+Runner yang sudah lolos volume masih melewati **Supertrend** (default nyala).
+Alert real-time hanya keluar kalau tren **bullish** pada candle terakhir yang
+sudah tutup. Bearish tidak dikirim dan **tidak** memulai cooldown. Watchlist
+tidak memakai gerbang ini kecuali `SUPERTREND_WATCHLIST=true`.
+
 Enrichment: tag ATH dari `market_cap >= history_highest_market_cap`.
 
 ## Alur
@@ -42,9 +47,22 @@ GMGN /v1/market/rank (interval 5m, limit 100, order volume)   tiap 30 detik
   -> vol 5m < $5K  ? drop (tidak memakai request Meteora/security)
   -> Meteora DLMM + DAMM v2 (sum tvl, filter >= $20K)
   -> /v1/token/security  (blacklist, honeypot, renounced)
-  -> vol 5m >= $30K ? runner -> kirim SEKARANG (cooldown 60 menit)
-                    : watchlist -> buffer, kirim tiap 30 menit (maks 20)
+  -> vol 5m >= $30K ? runner
+       -> cooldown masih jalan? lewati
+       -> Supertrend (GMGN /v1/market/token_kline, candle terakhir yang SUDAH TUTUP)
+            -> bullish: kirim SEKARANG + tag ST 🟢 bullish, mulai cooldown
+            -> bearish: jangan kirim, jangan cooldown (log: supertrend bearish)
+            -> candle gagal/kurang: SUPERTREND_ON_ERROR=skip (default) atau allow
+     : watchlist -> buffer, kirim tiap 30 menit (maks 20)
+                   (SUPERTREND_WATCHLIST=true ikut gerbang yang sama; default mati)
 ```
+
+Candle Supertrend diambil dari GMGN OpenAPI `GET /v1/market/token_kline`
+(method `getTokenKline` di gmgn-cli: `chain`, `address`, `resolution`,
+`from`/`to` dalam milidetik). Pemanggilan lewat klien di `src/gmgn.ts`, jadi
+ikut rate limiter yang sama. GeckoTerminal tidak dipakai. ATR period default
+10, multiplier 3, timeframe 5m, sekitar 100 candle tertutup. Keputusan memakai
+candle **terakhir yang sudah tutup**, bukan candle yang masih berjalan.
 
 ## Format alert
 
@@ -53,12 +71,13 @@ GMGN /v1/market/rank (interval 5m, limit 100, order volume)   tiap 30 detik
 ```
 🚀 $FIONA — Runner Alert
 
-MC $2.64M · Vol 5m $92.3K · 🔥ATH
+MC $2.64M · Vol 5m $92.3K · 🔥ATH · ST 🟢 bullish
 [ 📋 Copy CA ] [ GMGN ]
 ```
 
-Badge `🔥ATH` hanya muncul kalau token berada di ATH. Baris `CA:` tidak lagi
-ditulis di teks pesan; CA disalin lewat tombol `📋 Copy CA`.
+Badge `🔥ATH` hanya muncul kalau token berada di ATH. Tag `ST 🟢 bullish`
+ditambahkan kalau gerbang Supertrend lolos. Baris `CA:` tidak lagi ditulis
+di teks pesan; CA disalin lewat tombol `📋 Copy CA`.
 
 **Watchlist (tiap 30 menit, urut vol 5m):**
 
@@ -88,6 +107,7 @@ cp .env.example .env
 cp strat.conf.example strat.conf
 # isi GMGN_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID di .env
 npm run build
+npm test                # unit Supertrend, tanpa API dan tanpa menjalankan bot
 npm run test:telegram   # kirim pesan tes
 npm run warmup          # catat token trending saat ini tanpa kirim alert
 npm run once            # satu kali scan, tanpa daemon
@@ -109,7 +129,7 @@ mtime file di awal setiap siklus, jadi perubahan berlaku pada siklus berikutnya
 (maksimal ~`POLL_INTERVAL_MS`, default 30 detik). Log akan menulis:
 
 ```
-strat.conf reloaded {"file":"/opt/gmgn-runner-alert/strat.conf","keys":25,"changed":1,"errors":0}
+strat.conf reloaded {"file":"/opt/gmgn-runner-alert/strat.conf","keys":35,"changed":1,"errors":0}
 strat MIN_VOL5M_USD: 10000 -> 5000
 ```
 
@@ -128,6 +148,9 @@ ditulis di `strat.conf` juga tetap dibaca.
 | runtime | `POLL_INTERVAL_MS` / `MAX_CANDIDATES_PER_CYCLE` / `COOLDOWN_MINUTES` | 30000 / 25 / 60 |
 | runtime | `DRY_RUN` / `DB_PATH` | false / data/bot.db |
 | cache | `INFO_CACHE_MS` / `SECURITY_CACHE_MS` / `METEORA_CACHE_MS` | 55s / 1h / 5m |
+| supertrend | `SUPERTREND_ENABLED` / `SUPERTREND_ON_ERROR` / `SUPERTREND_WATCHLIST` | true / skip / false |
+| supertrend | `SUPERTREND_PERIOD` / `SUPERTREND_MULTIPLIER` / `SUPERTREND_TIMEFRAME` | 10 / 3 / 5m |
+| supertrend | `SUPERTREND_CANDLES` / `SUPERTREND_CACHE_MS` | 100 / 240000 |
 | report | `REPORT_MODE` / `REPORT_WINDOW_MINUTES` / `WATCHLIST_MAX` | digest / 30 / 20 |
 | report | `REPORT_TIMEZONE` / `REPORT_TZ_LABEL` | Asia/Jakarta / WIB |
 
@@ -156,7 +179,8 @@ pm2 logs gmgn-runner-alert
   (`📋 $PEPE ·4Cxj`) supaya tidak tertukar.
 - State dedupe/cooldown disimpan di `data/bot.db` (SQLite bawaan Node).
 - `DRY_RUN=true` akan mencetak pesan ke log tanpa mengirim ke Telegram, tapi state tetap dicatat.
-- `npm run warmup` mencatat token trending saat ini tanpa alert, jadi saat pertama kali live tidak ada burst.
+- `npm run warmup` mencatat token trending saat ini tanpa alert, jadi saat pertama kali live tidak ada burst. Runner yang Supertrend-nya bearish tidak di-seed, supaya flip berikutnya tetap bisa mengirim.
+- `SUPERTREND_ENABLED=true` (default): runner volume tinggi hanya dikirim saat tren bullish. `false` mengembalikan perilaku lama (tanpa cek tren, tanpa tag).
 
 ## Rate limit GMGN (hasil pengukuran langsung)
 
@@ -200,6 +224,11 @@ Desain yang dipakai:
 7. **Kegagalan per token diisolasi**: satu 429/timeout tidak membatalkan
    seluruh siklus, dan siklus berikutnya dijadwalkan `POLL_INTERVAL_MS`
    (default 30 detik) **setelah** siklus sebelumnya selesai (tidak menumpuk).
+8. **Kline Supertrend** (`GET /v1/market/token_kline`, bobot 2) hanya untuk
+   runner yang lolos cooldown (watchlist hanya kalau `SUPERTREND_WATCHLIST=true`).
+   Request-nya mengantri di `Pacer` yang sama. Candle yang masih berjalan
+   dibuang; snapshot candle tertutup di-cache sampai bar berikutnya tutup
+   (`SUPERTREND_CACHE_MS` memotong lebih awal kalau di-set lebih pendek).
 
 Konsumsi nyata (limit 100, filter penuh, ~10 kandidat):
 

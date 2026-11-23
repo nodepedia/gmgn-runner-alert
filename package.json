@@ -13,7 +13,8 @@
     "once": "node dist/index.js --once",
     "warmup": "node dist/index.js --warmup",
     "test:telegram": "node dist/index.js --test",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && node --test dist/supertrend.test.js"
   },
   "dependencies": {
     "dotenv": "^16.4.7"

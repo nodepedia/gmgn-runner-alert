@@ -18,6 +18,8 @@ export interface AlertPayload {
     historyMarketCap: number;
     previousMarketCap: number;
   };
+  /** Set by the runner Supertrend gate when the last closed candle is bullish. */
+  trendTag?: string;
 }
 
 type Keyboard = { inline_keyboard: InlineButton[][] };
@@ -29,6 +31,7 @@ export function buildMessage(payload: AlertPayload): string {
     `Vol 5m <b>${formatUsd(payload.vol5mUsd)}</b>`,
   ];
   if (payload.ath) stats.push("🔥<b>ATH</b>");
+  if (payload.trendTag) stats.push(escapeHtml(payload.trendTag));
 
   return [`🚀 <b>$${symbol}</b> — Runner Alert`, "", stats.join(" · ")].join("\n");
 }
@@ -122,6 +125,7 @@ export async function sendTestMessage(): Promise<void> {
     `Scan: trending <b>${config.scan.interval}</b> · limit ${config.scan.limit} · poll ${config.scan.pollMs / 1000}s`,
     `Filter: age ≥ ${config.scan.minAgeHours}h · MC ≥ ${formatUsd(config.scan.minMarketCap)} · fees ≥ ${config.scan.minTotalFeeSol} SOL · vol 5m ≥ ${formatUsd(config.scan.minVol5mUsd)} · TVL Meteora ≥ ${formatUsd(config.scan.minTvlUsd)}`,
     `Watchlist: vol 5m ≥ ${formatUsd(config.scan.minWatchlistVol5mUsd)} (di bawah runner)`,
+    `Supertrend: ${config.supertrend.enabled ? "nyala" : "mati"} · ${config.supertrend.timeframe} · ATR ${config.supertrend.period} × ${config.supertrend.multiplier} · gagal candle: ${config.supertrend.onError}`,
     "",
     "Bot siap memantau.",
   ].join("\n");

@@ -20,6 +20,7 @@ import {
   sendTestMessage,
   type AlertPayload,
 } from "./telegram.js";
+import { applyTrendGate } from "./trendgate.js";
 
 let cycleRunning = false;
 
@@ -55,6 +56,8 @@ interface CycleStats {
   watchlistSent: number;
   watchlistDropped: number;
   rejectedTvl: number;
+  /** Runner (or watchlist, when gated) blocked by Supertrend. */
+  rejectedSupertrend: number;
 }
 
 /**
@@ -268,6 +271,7 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
       watchlistSent: 0,
       watchlistDropped: 0,
       rejectedTvl: 0,
+      rejectedSupertrend: 0,
     };
     let errors = 0;
 
@@ -286,6 +290,10 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
 
     if (warmup) {
       for (const item of evaluated) {
+        // Seed only tokens the live path would actually alert. A bearish
+        // runner is left without a cooldown so a later flip can still notify.
+        const path = item.isRunner ? "runner" : "watchlist";
+        if (!(await applyTrendGate(item.payload, path))) continue;
         recordWarmup(item.state);
         log.info(`warmup seeded $${item.payload.symbol}`, { mint: item.state.mint });
       }
@@ -294,6 +302,12 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
         if (item.isRunner) {
           if (!canAlert(item.payload.mint)) continue; // runner cooldown
           try {
+            // Gate after cooldown so an in-flight cooldown does not spend a
+            // kline request. Bearish / skip returns before recordAlert.
+            if (!(await applyTrendGate(item.payload, "runner"))) {
+              stats.rejectedSupertrend += 1;
+              continue;
+            }
             await deliverRunner(item);
             stats.runners += 1;
           } catch (error) {
@@ -309,6 +323,10 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
         // Watchlist is digest-only; individual mode keeps the old behaviour
         // of not reporting tokens below the volume threshold.
         if (config.report.mode === "digest") {
+          if (!(await applyTrendGate(item.payload, "watchlist"))) {
+            stats.rejectedSupertrend += 1;
+            continue;
+          }
           watchlist.set(item.payload.mint, item.payload);
         }
       }
@@ -345,6 +363,7 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
       watchlistDropped: stats.watchlistDropped,
       rejected: batch.length - evaluated.length - errors,
       rejectedTvl: stats.rejectedTvl,
+      rejectedSupertrend: stats.rejectedSupertrend,
       belowWatchlist: stats.belowWatchlist,
       errors,
       gapMs: pacer.currentGapMs,
