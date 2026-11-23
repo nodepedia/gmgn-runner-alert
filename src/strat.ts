@@ -1,8 +1,9 @@
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { config, type SupertrendOnError } from "./config.js";
+import { config, type SupertrendOnError, type SupertrendSource } from "./config.js";
 import { pacer } from "./gmgn.js";
 import { log } from "./logger.js";
+import { meteoraTimeframe } from "./ohlcv.js";
 import { SUPERTREND_TIMEFRAMES } from "./supertrend.js";
 
 type Value = string | number | boolean | string[];
@@ -419,6 +420,25 @@ export const FIELDS: FieldSpec[] = [
       config.supertrend.enabled = value;
     },
   ),
+  textField(
+    "SUPERTREND_SOURCE",
+    "supertrend",
+    "meteora or gmgn candles",
+    () => config.supertrend.source,
+    (value) => {
+      config.supertrend.source = value as SupertrendSource;
+    },
+    { pattern: /^(meteora|gmgn)$/ },
+  ),
+  boolField(
+    "SUPERTREND_FALLBACK_GMGN",
+    "supertrend",
+    "use GMGN kline when Meteora fails",
+    () => config.supertrend.fallbackGmgn,
+    (value) => {
+      config.supertrend.fallbackGmgn = value;
+    },
+  ),
   numberField(
     "SUPERTREND_PERIOD",
     "supertrend",
@@ -675,6 +695,16 @@ export function applyStratText(text: string, file = "strat.conf"): StratResult {
   if (config.supertrend.enabled && config.supertrend.candles < config.supertrend.period) {
     log.warn(
       `SUPERTREND_CANDLES (${config.supertrend.candles}) < SUPERTREND_PERIOD (${config.supertrend.period}): runner gate will treat every token as insufficient data`,
+    );
+  }
+
+  if (
+    config.supertrend.enabled &&
+    config.supertrend.source === "meteora" &&
+    !meteoraTimeframe(config.supertrend.timeframe)
+  ) {
+    log.warn(
+      `SUPERTREND_TIMEFRAME ${config.supertrend.timeframe} is not on Meteora DLMM OHLCV (use 5m, 1h, 4h, or 1d)`,
     );
   }
 

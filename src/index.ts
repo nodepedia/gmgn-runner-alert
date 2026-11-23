@@ -9,7 +9,7 @@ import {
   pacer,
   type RankItem,
 } from "./gmgn.js";
-import { getMeteoraTvl } from "./meteora.js";
+import { getMeteoraTvl, type DlmmPoolRef } from "./meteora.js";
 import { canAlert, getState, pruneCache, recordAlert, recordWarmup } from "./db.js";
 import { initStrat, printEffectiveConfig, reloadStratIfChanged } from "./strat.js";
 import { buildWatchlist } from "./report.js";
@@ -39,6 +39,8 @@ interface Evaluated {
   payload: AlertPayload;
   /** true = passes every filter including the runner volume threshold. */
   isRunner: boolean;
+  /** Highest-TVL DLMM pool from the TVL fetch. OHLCV reuses it. */
+  topDlmm?: DlmmPoolRef;
   state: {
     mint: string;
     symbol: string;
@@ -188,6 +190,7 @@ async function evaluate(
   return {
     payload,
     isRunner,
+    topDlmm: meteora.topDlmm,
     state: {
       mint,
       symbol: payload.symbol,
@@ -293,7 +296,7 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
         // Seed only tokens the live path would actually alert. A bearish
         // runner is left without a cooldown so a later flip can still notify.
         const path = item.isRunner ? "runner" : "watchlist";
-        if (!(await applyTrendGate(item.payload, path))) continue;
+        if (!(await applyTrendGate(item.payload, path, item.topDlmm))) continue;
         recordWarmup(item.state);
         log.info(`warmup seeded $${item.payload.symbol}`, { mint: item.state.mint });
       }
@@ -304,7 +307,7 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
           try {
             // Gate after cooldown so an in-flight cooldown does not spend a
             // kline request. Bearish / skip returns before recordAlert.
-            if (!(await applyTrendGate(item.payload, "runner"))) {
+            if (!(await applyTrendGate(item.payload, "runner", item.topDlmm))) {
               stats.rejectedSupertrend += 1;
               continue;
             }
@@ -323,7 +326,7 @@ async function runCycle(options: { warmup?: boolean } = {}): Promise<void> {
         // Watchlist is digest-only; individual mode keeps the old behaviour
         // of not reporting tokens below the volume threshold.
         if (config.report.mode === "digest") {
-          if (!(await applyTrendGate(item.payload, "watchlist"))) {
+          if (!(await applyTrendGate(item.payload, "watchlist", item.topDlmm))) {
             stats.rejectedSupertrend += 1;
             continue;
           }

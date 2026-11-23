@@ -125,7 +125,7 @@ export async function sendTestMessage(): Promise<void> {
     `Scan: trending <b>${config.scan.interval}</b> · limit ${config.scan.limit} · poll ${config.scan.pollMs / 1000}s`,
     `Filter: age ≥ ${config.scan.minAgeHours}h · MC ≥ ${formatUsd(config.scan.minMarketCap)} · fees ≥ ${config.scan.minTotalFeeSol} SOL · vol 5m ≥ ${formatUsd(config.scan.minVol5mUsd)} · TVL Meteora ≥ ${formatUsd(config.scan.minTvlUsd)}`,
     `Watchlist: vol 5m ≥ ${formatUsd(config.scan.minWatchlistVol5mUsd)} (di bawah runner)`,
-    `Supertrend: ${config.supertrend.enabled ? "nyala" : "mati"} · ${config.supertrend.timeframe} · ATR ${config.supertrend.period} × ${config.supertrend.multiplier} · gagal candle: ${config.supertrend.onError}`,
+    `Supertrend: ${config.supertrend.enabled ? "nyala" : "mati"} · ${config.supertrend.source} · ${config.supertrend.timeframe} · ATR ${config.supertrend.period} × ${config.supertrend.multiplier} · gagal candle: ${config.supertrend.onError}`,
     "",
     "Bot siap memantau.",
   ].join("\n");

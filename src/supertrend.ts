@@ -47,6 +47,8 @@ export interface Candle {
   high: number;
   low: number;
   close: number;
+  /** Quote volume when the source reports it. Gap-filled bars use 0. */
+  volume?: number;
 }
 
 export interface SupertrendBar {

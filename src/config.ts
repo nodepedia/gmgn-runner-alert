@@ -3,6 +3,7 @@ import { isSupertrendTimeframe, SUPERTREND_TIMEFRAMES } from "./supertrend.js";
 
 export type ReportMode = "digest" | "individual";
 export type SupertrendOnError = "skip" | "allow";
+export type SupertrendSource = "meteora" | "gmgn";
 
 function num(key: string, fallback: number): number {
   const raw = process.env[key];
@@ -52,6 +53,13 @@ function supertrendOnError(): SupertrendOnError {
   if (!raw) return "skip";
   if (raw === "skip" || raw === "allow") return raw;
   throw new Error(`Invalid SUPERTREND_ON_ERROR: ${raw} (use skip or allow)`);
+}
+
+function supertrendSource(): SupertrendSource {
+  const raw = process.env.SUPERTREND_SOURCE?.trim().toLowerCase();
+  if (!raw) return "meteora";
+  if (raw === "meteora" || raw === "gmgn") return raw;
+  throw new Error(`Invalid SUPERTREND_SOURCE: ${raw} (use meteora or gmgn)`);
 }
 
 const apiKey = process.env.GMGN_API_KEY?.trim() ?? "";
@@ -129,16 +137,21 @@ export const config = {
     tzLabel: process.env.REPORT_TZ_LABEL ?? "WIB",
   },
   /**
-   * Runner trend gate. Candle source is GMGN `GET /v1/market/token_kline`
-   * (gmgn-cli `OpenApiClient.getTokenKline`), paced by the shared GMGN pacer.
+   * Runner trend gate. Default candles are Meteora DLMM OHLCV for the
+   * highest-TVL DLMM pool already loaded by the TVL filter. GMGN
+   * `/v1/market/token_kline` is used only when source is `gmgn` or
+   * `SUPERTREND_FALLBACK_GMGN` is on.
    */
   supertrend: {
     enabled: bool("SUPERTREND_ENABLED", true),
+    source: supertrendSource(),
+    /** When Meteora has no DLMM pool or the OHLCV call fails, spend a GMGN kline. */
+    fallbackGmgn: bool("SUPERTREND_FALLBACK_GMGN", false),
     period: intInRange("SUPERTREND_PERIOD", 10, 1, 200),
     multiplier: floatInRange("SUPERTREND_MULTIPLIER", 3, 0.1, 100),
     timeframe: supertrendTimeframe(),
-    /** Closed candles requested. The forming bar is not counted. */
-    candles: intInRange("SUPERTREND_CANDLES", 100, 10, 500),
+    /** Closed candles requested. 60 stays inside two Meteora chunks of 50. */
+    candles: intInRange("SUPERTREND_CANDLES", 60, 10, 500),
     /** skip = don't alert when candles fail; allow = send the runner anyway. */
     onError: supertrendOnError(),
     /** Off: the watchlist ignores Supertrend. On: same bullish gate as runners. */
@@ -182,6 +195,8 @@ export function summarizeConfig() {
     reportTimezone: config.report.timezone,
     dryRun: config.dryRun,
     supertrend: config.supertrend.enabled,
+    supertrendSource: config.supertrend.source,
+    supertrendFallbackGmgn: config.supertrend.fallbackGmgn,
     supertrendPeriod: config.supertrend.period,
     supertrendMultiplier: config.supertrend.multiplier,
     supertrendTimeframe: config.supertrend.timeframe,
@@ -189,6 +204,5 @@ export function summarizeConfig() {
     supertrendOnError: config.supertrend.onError,
     supertrendWatchlist: config.supertrend.watchlist,
     supertrendCacheMs: config.supertrend.cacheMs,
-    supertrendSource: "gmgn:/v1/market/token_kline",
   };
 }

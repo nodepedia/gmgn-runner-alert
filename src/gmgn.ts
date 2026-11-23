@@ -237,12 +237,13 @@ const klineKey = (mint: string, resolution: string, limit: number) =>
   `kline:${resolution}:${limit}:${mint}`;
 
 /**
- * OHLCV for the Supertrend gate.
+ * OHLCV from GMGN. Used when SUPERTREND_SOURCE=gmgn, or as the optional
+ * fallback when Meteora has no DLMM pool and SUPERTREND_FALLBACK_GMGN=true.
  *
- * Source: GMGN OpenAPI `GET /v1/market/token_kline`, the same route as
- * gmgn-cli `OpenApiClient.getTokenKline` (chain, address, resolution, and
- * `from`/`to` in milliseconds). The call goes through `request`, so it shares
- * the GMGN pacer. This route weighs 2 on the IP bucket.
+ * Route: `GET /v1/market/token_kline`, the same as gmgn-cli
+ * `OpenApiClient.getTokenKline` (chain, address, resolution, and `from`/`to`
+ * in milliseconds). The call goes through `request`, so it shares the GMGN
+ * pacer. This route weighs 2 on the IP bucket.
  *
  * The returned candles are closed only. The forming bar is dropped before the
  * snapshot is cached, and the cache expires at the next bar close (or sooner,
