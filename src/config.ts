@@ -1,6 +1,9 @@
 import "dotenv/config";
+import { isSupertrendTimeframe, SUPERTREND_TIMEFRAMES } from "./supertrend.js";
 
 export type ReportMode = "digest" | "individual";
+export type SupertrendOnError = "skip" | "allow";
+export type SupertrendSource = "meteora" | "gmgn";
 
 function num(key: string, fallback: number): number {
   const raw = process.env[key];
@@ -16,6 +19,47 @@ function bool(key: string, fallback = false): boolean {
   const raw = process.env[key];
   if (raw === undefined || raw.trim() === "") return fallback;
   return ["1", "true", "yes", "on"].includes(raw.trim().toLowerCase());
+}
+
+function intInRange(key: string, fallback: number, min: number, max: number): number {
+  const value = num(key, fallback);
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new Error(`Invalid ${key}: ${value} (whole number ${min}..${max})`);
+  }
+  return value;
+}
+
+function floatInRange(key: string, fallback: number, min: number, max: number): number {
+  const value = num(key, fallback);
+  if (value < min || value > max) {
+    throw new Error(`Invalid ${key}: ${value} (${min}..${max})`);
+  }
+  return value;
+}
+
+function supertrendTimeframe(): string {
+  const raw = process.env.SUPERTREND_TIMEFRAME?.trim();
+  if (!raw) return "5m";
+  if (!isSupertrendTimeframe(raw)) {
+    throw new Error(
+      `Invalid SUPERTREND_TIMEFRAME: ${raw} (use ${SUPERTREND_TIMEFRAMES.join(", ")})`,
+    );
+  }
+  return raw;
+}
+
+function supertrendOnError(): SupertrendOnError {
+  const raw = process.env.SUPERTREND_ON_ERROR?.trim().toLowerCase();
+  if (!raw) return "skip";
+  if (raw === "skip" || raw === "allow") return raw;
+  throw new Error(`Invalid SUPERTREND_ON_ERROR: ${raw} (use skip or allow)`);
+}
+
+function supertrendSource(): SupertrendSource {
+  const raw = process.env.SUPERTREND_SOURCE?.trim().toLowerCase();
+  if (!raw) return "meteora";
+  if (raw === "meteora" || raw === "gmgn") return raw;
+  throw new Error(`Invalid SUPERTREND_SOURCE: ${raw} (use meteora or gmgn)`);
 }
 
 const apiKey = process.env.GMGN_API_KEY?.trim() ?? "";
@@ -92,6 +136,32 @@ export const config = {
     timezone: process.env.REPORT_TIMEZONE ?? "Asia/Jakarta",
     tzLabel: process.env.REPORT_TZ_LABEL ?? "WIB",
   },
+  /**
+   * Runner trend gate. Default candles are Meteora DLMM OHLCV for the
+   * highest-TVL DLMM pool already loaded by the TVL filter. GMGN
+   * `/v1/market/token_kline` is used only when source is `gmgn` or
+   * `SUPERTREND_FALLBACK_GMGN` is on.
+   */
+  supertrend: {
+    enabled: bool("SUPERTREND_ENABLED", true),
+    source: supertrendSource(),
+    /** When Meteora has no DLMM pool or the OHLCV call fails, spend a GMGN kline. */
+    fallbackGmgn: bool("SUPERTREND_FALLBACK_GMGN", false),
+    period: intInRange("SUPERTREND_PERIOD", 10, 1, 200),
+    multiplier: floatInRange("SUPERTREND_MULTIPLIER", 3, 0.1, 100),
+    timeframe: supertrendTimeframe(),
+    /** Closed candles requested. 60 stays inside two Meteora chunks of 50. */
+    candles: intInRange("SUPERTREND_CANDLES", 60, 10, 500),
+    /** skip = don't alert when candles fail; allow = send the runner anyway. */
+    onError: supertrendOnError(),
+    /** Off: the watchlist ignores Supertrend. On: same bullish gate as runners. */
+    watchlist: bool("SUPERTREND_WATCHLIST", false),
+    /**
+     * Upper bound on how long a closed-candle snapshot is reused. The effective
+     * TTL is also capped to the next bar close. 0 disables the cache.
+     */
+    cacheMs: intInRange("SUPERTREND_CACHE_MS", 240_000, 0, 3_600_000),
+  },
   dbPath: process.env.DB_PATH ?? "data/bot.db",
   dryRun: bool("DRY_RUN", false),
 };
@@ -124,5 +194,15 @@ export function summarizeConfig() {
     watchlistMax: config.report.watchlistMax,
     reportTimezone: config.report.timezone,
     dryRun: config.dryRun,
+    supertrend: config.supertrend.enabled,
+    supertrendSource: config.supertrend.source,
+    supertrendFallbackGmgn: config.supertrend.fallbackGmgn,
+    supertrendPeriod: config.supertrend.period,
+    supertrendMultiplier: config.supertrend.multiplier,
+    supertrendTimeframe: config.supertrend.timeframe,
+    supertrendCandles: config.supertrend.candles,
+    supertrendOnError: config.supertrend.onError,
+    supertrendWatchlist: config.supertrend.watchlist,
+    supertrendCacheMs: config.supertrend.cacheMs,
   };
 }

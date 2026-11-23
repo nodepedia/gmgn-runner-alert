@@ -1,14 +1,16 @@
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { config } from "./config.js";
+import { config, type SupertrendOnError, type SupertrendSource } from "./config.js";
 import { pacer } from "./gmgn.js";
 import { log } from "./logger.js";
+import { meteoraTimeframe } from "./ohlcv.js";
+import { SUPERTREND_TIMEFRAMES } from "./supertrend.js";
 
 type Value = string | number | boolean | string[];
 
 export interface FieldSpec {
   key: string;
-  group: "gmgn" | "telegram" | "filter" | "runtime" | "cache" | "report";
+  group: "gmgn" | "telegram" | "filter" | "runtime" | "cache" | "supertrend" | "report";
   label: string;
   secret?: boolean;
   /** Applied in memory but only takes effect after a restart. */
@@ -143,6 +145,7 @@ function listField(
 
 const TRENDING_INTERVALS = ["1m", "5m", "1h", "6h", "24h"];
 const TRENDING_INTERVAL_PATTERN = new RegExp(`^(${TRENDING_INTERVALS.join("|")})$`);
+const SUPERTREND_TIMEFRAME_PATTERN = new RegExp(`^(${SUPERTREND_TIMEFRAMES.join("|")})$`);
 
 export const FIELDS: FieldSpec[] = [
   // --- GMGN / pacing -------------------------------------------------------
@@ -407,6 +410,105 @@ export const FIELDS: FieldSpec[] = [
     { integer: true, min: 30_000, max: 3_600_000 },
   ),
 
+  // --- Supertrend (runner gate) --------------------------------------------
+  boolField(
+    "SUPERTREND_ENABLED",
+    "supertrend",
+    "gate runner alerts on Supertrend",
+    () => config.supertrend.enabled,
+    (value) => {
+      config.supertrend.enabled = value;
+    },
+  ),
+  textField(
+    "SUPERTREND_SOURCE",
+    "supertrend",
+    "meteora or gmgn candles",
+    () => config.supertrend.source,
+    (value) => {
+      config.supertrend.source = value as SupertrendSource;
+    },
+    { pattern: /^(meteora|gmgn)$/ },
+  ),
+  boolField(
+    "SUPERTREND_FALLBACK_GMGN",
+    "supertrend",
+    "use GMGN kline when Meteora fails",
+    () => config.supertrend.fallbackGmgn,
+    (value) => {
+      config.supertrend.fallbackGmgn = value;
+    },
+  ),
+  numberField(
+    "SUPERTREND_PERIOD",
+    "supertrend",
+    "ATR period",
+    () => config.supertrend.period,
+    (value) => {
+      config.supertrend.period = value;
+    },
+    { integer: true, min: 1, max: 200 },
+  ),
+  numberField(
+    "SUPERTREND_MULTIPLIER",
+    "supertrend",
+    "ATR multiplier",
+    () => config.supertrend.multiplier,
+    (value) => {
+      config.supertrend.multiplier = value;
+    },
+    { min: 0.1, max: 100 },
+  ),
+  textField(
+    "SUPERTREND_TIMEFRAME",
+    "supertrend",
+    "candle timeframe",
+    () => config.supertrend.timeframe,
+    (value) => {
+      config.supertrend.timeframe = value;
+    },
+    { pattern: SUPERTREND_TIMEFRAME_PATTERN, maxLength: 3 },
+  ),
+  numberField(
+    "SUPERTREND_CANDLES",
+    "supertrend",
+    "closed candles fetched",
+    () => config.supertrend.candles,
+    (value) => {
+      config.supertrend.candles = value;
+    },
+    { integer: true, min: 10, max: 500 },
+  ),
+  textField(
+    "SUPERTREND_ON_ERROR",
+    "supertrend",
+    "skip or allow when candles fail",
+    () => config.supertrend.onError,
+    (value) => {
+      config.supertrend.onError = value as SupertrendOnError;
+    },
+    { pattern: /^(skip|allow)$/ },
+  ),
+  boolField(
+    "SUPERTREND_WATCHLIST",
+    "supertrend",
+    "also gate the watchlist",
+    () => config.supertrend.watchlist,
+    (value) => {
+      config.supertrend.watchlist = value;
+    },
+  ),
+  numberField(
+    "SUPERTREND_CACHE_MS",
+    "supertrend",
+    "kline cache TTL, capped to one bar",
+    () => config.supertrend.cacheMs,
+    (value) => {
+      config.supertrend.cacheMs = value;
+    },
+    { integer: true, min: 0, max: 3_600_000 },
+  ),
+
   // --- Report --------------------------------------------------------------
   textField(
     "REPORT_MODE",
@@ -587,6 +689,22 @@ export function applyStratText(text: string, file = "strat.conf"): StratResult {
   ) {
     log.warn(
       `MIN_WATCHLIST_VOL5M_USD (${config.scan.minWatchlistVol5mUsd}) >= MIN_VOL5M_USD (${config.scan.minVol5mUsd}): watchlist stays empty`,
+    );
+  }
+
+  if (config.supertrend.enabled && config.supertrend.candles < config.supertrend.period) {
+    log.warn(
+      `SUPERTREND_CANDLES (${config.supertrend.candles}) < SUPERTREND_PERIOD (${config.supertrend.period}): runner gate will treat every token as insufficient data`,
+    );
+  }
+
+  if (
+    config.supertrend.enabled &&
+    config.supertrend.source === "meteora" &&
+    !meteoraTimeframe(config.supertrend.timeframe)
+  ) {
+    log.warn(
+      `SUPERTREND_TIMEFRAME ${config.supertrend.timeframe} is not on Meteora DLMM OHLCV (use 5m, 1h, 4h, or 1d)`,
     );
   }
 

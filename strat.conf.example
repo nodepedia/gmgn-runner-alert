@@ -64,6 +64,37 @@ INFO_CACHE_MS=55000
 SECURITY_CACHE_MS=3600000
 METEORA_CACHE_MS=300000
 
+# --- Supertrend (gerbang tren, hanya jalur Runner) ------------------------
+# Setelah token lolos semua filter dan vol 5m >= MIN_VOL5M_USD, alert
+# real-time hanya dikirim kalau Supertrend bullish pada candle TERAKHIR
+# yang sudah tutup. Bearish tidak dikirim dan tidak memulai cooldown,
+# jadi alert tetap bisa keluar begitu tren berbalik selagi volume tinggi.
+# Matikan gerbang: SUPERTREND_ENABLED=false
+SUPERTREND_ENABLED=true
+# meteora = OHLCV pool DLMM TVL tertinggi (sudah diambil untuk filter TVL,
+# tanpa request discovery tambahan). gmgn = /v1/market/token_kline.
+# Harga Meteora adalah token Y per 1 token X. Kalau mint ada di token_y,
+# OHLC dibalik (high/low ikut tertukar) supaya arahnya harga token itu.
+SUPERTREND_SOURCE=meteora
+# true = kalau tidak ada pool DLMM atau Meteora gagal, pakai kline GMGN.
+# false (default) = jangan habiskan kuota GMGN; ikut SUPERTREND_ON_ERROR.
+SUPERTREND_FALLBACK_GMGN=false
+# ATR period dan multiplier (TradingView ta.supertrend).
+SUPERTREND_PERIOD=10
+SUPERTREND_MULTIPLIER=3
+# 30s | 1m | 5m | 15m | 1h | 4h | 1d. Meteora hanya 5m, 1h, 4h, 1d (sebagai 24h).
+SUPERTREND_TIMEFRAME=5m
+# Candle tertutup. 60 = dua request Meteora (maks 50 candle per request).
+# 100 candle 5m sekali request ditolak ("time range too large").
+SUPERTREND_CANDLES=60
+# Candle gagal / kurang dari period: skip = jangan alert, allow = kirim tetap.
+SUPERTREND_ON_ERROR=skip
+# true = watchlist ikut gerbang bullish yang sama. Default mati.
+SUPERTREND_WATCHLIST=false
+# Batas atas cache candle (ms). Efektifnya dipotong sampai candle berikutnya
+# tutup. 0 = tanpa cache.
+SUPERTREND_CACHE_MS=240000
+
 # --- Format pesan ---------------------------------------------------------
 # digest = runner real-time + watchlist tiap N menit
 # individual = hanya runner real-time, watchlist tidak dikirim
